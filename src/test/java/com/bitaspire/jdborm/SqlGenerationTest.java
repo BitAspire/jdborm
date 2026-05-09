@@ -413,6 +413,97 @@ class SqlGenerationTest {
         assertEquals("SELECT id, name FROM users", q.toSql());
     }
 
+    // ── setRaw tests ──────────────────────────────────────────────────────
+
+    @Test
+    void insertWithSetRaw() {
+        InsertQuery q = new InsertQuery(null, "users");
+        q.set("name", "John").setRaw("created_at", "NOW()");
+        assertEquals("INSERT INTO users (name, created_at) VALUES (?, NOW())", q.toSql());
+        assertEquals(List.of("John"), q.getParameters());
+    }
+
+    @Test
+    void insertWithSetRawTypeSafe() {
+        InsertQuery q = new InsertQuery(null, "users");
+        q.set(NAME, "John").setRaw(CREATED_AT, "NOW()");
+        assertEquals("INSERT INTO users (name, created_at) VALUES (?, NOW())", q.toSql());
+        assertEquals(List.of("John"), q.getParameters());
+    }
+
+    @Test
+    void updateWithSetRaw() {
+        UpdateQuery q = new UpdateQuery(null, "users");
+        q.set("name", "John").setRaw("updated_at", "NOW()").where(eq("id", 1));
+        assertEquals("UPDATE users SET name = ?, updated_at = NOW() WHERE id = ?", q.toSql());
+        assertEquals(List.of("John", 1), q.getParameters());
+    }
+
+    @Test
+    void updateWithSetRawTypeSafe() {
+        UpdateQuery q = new UpdateQuery(null, "users");
+        q.set(NAME, "John").setRaw(CREATED_AT, "NOW()").where(eq(ID, 1));
+        assertEquals("UPDATE users SET name = ?, created_at = NOW() WHERE id = ?", q.toSql());
+        assertEquals(List.of("John", 1), q.getParameters());
+    }
+
+    // ── ON CONFLICT tests ─────────────────────────────────────────────────
+
+    @Test
+    void insertOnConflictDoNothing() {
+        InsertQuery q = new InsertQuery(null, "users");
+        q.set("name", "John").onConflictDoNothing();
+        assertEquals("INSERT INTO users (name) VALUES (?) ON CONFLICT DO NOTHING", q.toSql());
+        assertEquals(List.of("John"), q.getParameters());
+    }
+
+    @Test
+    void insertOnConflictDoUpdate() {
+        InsertQuery q = new InsertQuery(null, "users");
+        q.set("name", "John").set("email", "john@example.com")
+                .onConflictDoUpdate("name = EXCLUDED.name", "email = EXCLUDED.email");
+        assertEquals("INSERT INTO users (name, email) VALUES (?, ?) ON CONFLICT DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email", q.toSql());
+        assertEquals(List.of("John", "john@example.com"), q.getParameters());
+    }
+
+    @Test
+    void insertOnConflictDoUpdateTypeSafe() {
+        InsertQuery q = new InsertQuery(null, "users");
+        q.set(NAME, "John").onConflictDoUpdate("name = EXCLUDED.name");
+        assertEquals("INSERT INTO users (name) VALUES (?) ON CONFLICT DO UPDATE SET name = EXCLUDED.name", q.toSql());
+        assertEquals(List.of("John"), q.getParameters());
+    }
+
+    // ── Batch INSERT tests ────────────────────────────────────────────────
+
+    @Test
+    void insertBatch() {
+        InsertQuery q = new InsertQuery(null, "users");
+        q.set("name", "Alice").addBatch();
+        q.set("name", "Bob").addBatch();
+        assertEquals("INSERT INTO users (name) VALUES (?), (?)", q.toSql());
+        assertEquals(List.of("Alice", "Bob"), q.getParameters());
+    }
+
+    @Test
+    void insertBatchWithSetRaw() {
+        InsertQuery q = new InsertQuery(null, "users");
+        q.set("name", "Alice").setRaw("created_at", "NOW()").addBatch();
+        q.set("name", "Bob").setRaw("created_at", "NOW()").addBatch();
+        assertEquals("INSERT INTO users (name, created_at) VALUES (?, NOW()), (?, NOW())", q.toSql());
+        assertEquals(List.of("Alice", "Bob"), q.getParameters());
+    }
+
+    @Test
+    void insertBatchWithOnConflictDoNothing() {
+        InsertQuery q = new InsertQuery(null, "users");
+        q.set("name", "Alice").addBatch();
+        q.set("name", "Bob").addBatch();
+        q.onConflictDoNothing();
+        assertEquals("INSERT INTO users (name) VALUES (?), (?) ON CONFLICT DO NOTHING", q.toSql());
+        assertEquals(List.of("Alice", "Bob"), q.getParameters());
+    }
+
     @Test
     void typeSafeQualifiedColumnsInJoin() {
         SelectQuery q = new SelectQuery(null, U_ID.qualifiedName(), U_NAME.qualifiedName(), P_TITLE.qualifiedName());

@@ -28,7 +28,7 @@
 - Package: `com.bitaspire.jdborm`
 - Fluent API with method chaining (Drizzle-like)
 - Static imports for `Conditions.*`
-- Write Javadoc comments on all public classes, methods, and fields
+- **STRICTLY REQUIRED: Write Javadoc comments on ALL public classes, methods, and fields** — no exceptions. Every single public element must have a complete Javadoc (`@param`, `@return`, `@throws` where applicable). Missing Javadoc is considered a bug.
 - Records for value objects (conditions, join clauses)
 - Tests use JUnit 5 + AssertJ + HSQLDB for integration tests
 - Test class naming: `*Test.java`
@@ -45,15 +45,19 @@ com.bitaspire.jdborm
 ├── exception/
 │   └── JdbOrmException.java — Unchecked exception wrapping SQLException
 ├── mapper/
-│   └── ResultMapper.java    — ResultSet → POJO via reflection (field name matching)
+│   ├── ResultMapper.java    — ResultSet → POJO via reflection (field name matching)
+│   └── RowMapper.java       — Functional interface for custom result mapping
 ├── query/
-│   ├── SelectQuery.java     — SELECT builder: from(), where(), orderBy(), limit(), offset(), join/leftJoin/rightJoin(), execute(Class)
-│   ├── InsertQuery.java     — INSERT builder: set(), execute() returns List<Long> (generated keys)
-│   ├── UpdateQuery.java     — UPDATE builder: set(), where(), execute() returns int (affected rows)
+│   ├── SelectQuery.java     — SELECT builder: from(), where(), orderBy(), limit(), offset(), join/leftJoin/rightJoin(), execute(Class), execute(RowMapper), executeScalar(Class)
+│   ├── InsertQuery.java     — INSERT builder: set(), setRaw(), onConflictDoNothing(), onConflictDoUpdate(), addBatch(), executeBatch(), execute() returns GeneratedKeys
+│   ├── UpdateQuery.java     — UPDATE builder: set(), setRaw(), where(), execute() returns int (affected rows)
 │   ├── DeleteQuery.java     — DELETE builder: where(), execute() returns int
-│   └── JoinClause.java      — Record: type, table, onLeft, onRight
+│   ├── JoinClause.java      — Record: type, table, onLeft, onRight
+│   ├── RawExpression.java   — Record: expression wrapper for setRaw()
+│   └── TransactionCallback.java — Functional interface for inTransaction()
 └── schema/
     └── Column.java          — Type-safe column reference (table name + column name + type token)
+    └── Table.java           — Type-safe table reference (name + optional alias)
 ```
 
 ## API Reference
@@ -69,6 +73,10 @@ com.bitaspire.jdborm
 | `.insert(String table)` | `InsertQuery` | Start INSERT builder |
 | `.update(String table)` | `UpdateQuery` | Start UPDATE builder |
 | `.delete(String table)` | `DeleteQuery` | Start DELETE builder |
+| `.execute(String sql, Object... params)` | `int` | Raw SQL execution (affected rows) |
+| `.query(String sql, RowMapper<T>, Object... params)` | `List<T>` | Raw SELECT with custom RowMapper |
+| `.querySingle(String sql, Class<T>, Object... params)` | `T` | Raw SELECT, first row or null |
+| `.inTransaction(TransactionCallback<T>)` | `T` | Execute callback within a transaction |
 | `.getConnection()` | `Connection` | Borrow connection from pool or return direct |
 | `.close()` | `void` | Close direct connection (no-op for DataSource) |
 
@@ -85,7 +93,9 @@ com.bitaspire.jdborm
 | `.join(table, onLeft, onRight)` | `SelectQuery` | INNER JOIN |
 | `.leftJoin(table, onLeft, onRight)` | `SelectQuery` | LEFT JOIN |
 | `.rightJoin(table, onLeft, onRight)` | `SelectQuery` | RIGHT JOIN |
-| `.execute(Class<T>)` | `List<T>` | Execute and map rows to POJO |
+| `.execute(Class<T>)` | `List<T>` | Execute and map rows to POJO via reflection |
+| `.execute(RowMapper<T>)` | `List<T>` | Execute and map rows via custom RowMapper |
+| `.executeScalar(Class<T>)` | `T` | Execute and return first column of first row |
 | `.toSql()` | `String` | Build SQL string (for debugging) |
 | `.getParameters()` | `List<Object>` | Get parameter values |
 
@@ -94,13 +104,19 @@ com.bitaspire.jdborm
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `.set(String col, Object val)` | `InsertQuery` | Set column value |
-| `.execute()` | `List<Long>` | Execute; returns generated keys |
+| `.setRaw(String col, String expr)` | `InsertQuery` | Set raw SQL expression (e.g. "NOW()") |
+| `.onConflictDoNothing()` | `InsertQuery` | Add ON CONFLICT DO NOTHING |
+| `.onConflictDoUpdate(String... clauses)` | `InsertQuery` | Add ON CONFLICT DO UPDATE SET ... |
+| `.addBatch()` | `InsertQuery` | Save current values as batch row |
+| `.execute()` | `GeneratedKeys` | Execute; returns generated keys |
+| `.executeBatch()` | `int[]` | Execute accumulated batch rows |
 
 ### UpdateQuery
 
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `.set(String col, Object val)` | `UpdateQuery` | Set column value |
+| `.setRaw(String col, String expr)` | `UpdateQuery` | Set raw SQL expression (e.g. "counter + 1") |
 | `.where(Condition)` | `UpdateQuery` | Filter rows to update |
 | `.execute()` | `int` | Returns affected row count |
 
@@ -155,6 +171,29 @@ Internal records in `Condition.java`:
 
 Reflection-based: matches `ResultSet` column names to Java object fields (case-insensitive, underscores → camelCase). Supports primitives, wrappers, String, enums.
 
+### RowMapper (functional interface)
+
+```java
+@FunctionalInterface
+public interface RowMapper<T> {
+    T mapRow(ResultSet rs, int rowNum) throws SQLException;
+}
+```
+
+### TransactionCallback (functional interface)
+
+```java
+@FunctionalInterface
+public interface TransactionCallback<T> {
+    T execute(JdbORM jdborm);
+}
+```
+
+GeneratedKeys (returned by InsertQuery.execute()):
+- `.get(String name)` — get key by name
+- `.getFirst()` — get first generated key
+- `.asMap()` — all keys as map
+
 ## End-to-end usage
 
 ```java
@@ -169,31 +208,56 @@ List<User> users = db.select("id", "name", "email")
     .limit(10)
     .execute(User.class);
 
-// 3. INSERT
-List<Long> keys = db.insert("users")
+// 3. SELECT with custom RowMapper
+List<User> users = db.select("*").from("users")
+    .execute((rs, i) -> new User(rs.getLong("id"), rs.getString("name")));
+
+// 4. Scalar result
+Long count = db.select("count(*)").from("users").executeScalar(Long.class);
+
+// 5. INSERT with raw expression and ON CONFLICT
+var keys = db.insert("users")
     .set("name", "John")
-    .set("email", "john@example.com")
+    .setRaw("created_at", "NOW()")
+    .onConflictDoNothing()
     .execute();
 
-// 4. UPDATE
+// 6. Batch INSERT
+InsertQuery ins = db.insert("users");
+ins.set("name", "Alice").addBatch();
+ins.set("name", "Bob").addBatch();
+ins.executeBatch();
+
+// 7. UPDATE with raw expression
 int affected = db.update("users")
     .set("name", "Jane")
+    .setRaw("updated_at", "NOW()")
     .where(eq("id", 1))
     .execute();
 
-// 5. DELETE
+// 8. DELETE
 int deleted = db.delete("users")
     .where(eq("id", 1))
     .execute();
 
-// 6. JOIN
+// 9. JOIN
 List<Post> posts = db.select("u.id", "p.title")
     .from("users u")
     .join("posts p", "p.user_id", "u.id")
     .leftJoin("comments c", "c.post_id", "p.id")
     .execute(Post.class);
 
-// 7. Compound conditions
+// 10. Transaction
+db.inTransaction(tx -> {
+    tx.insert("users").set("name", "John").execute();
+    tx.update("accounts").set("balance", 100).where(eq("id", 1)).execute();
+    return null;
+});
+
+// 11. Raw SQL
+db.execute("UPDATE users SET name = ? WHERE id = ?", "John", 1);
+
+// 12. Compound conditions
 where(and(
     eq("status", "active"),
     or(eq("role", "admin"), eq("role", "moderator")),

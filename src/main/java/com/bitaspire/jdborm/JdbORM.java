@@ -1,18 +1,25 @@
 package com.bitaspire.jdborm;
 
+import com.bitaspire.jdborm.exception.JdbOrmException;
+import com.bitaspire.jdborm.mapper.ResultMapper;
+import com.bitaspire.jdborm.mapper.RowMapper;
 import com.bitaspire.jdborm.query.DeleteQuery;
 import com.bitaspire.jdborm.query.InsertQuery;
 import com.bitaspire.jdborm.query.SelectQuery;
+import com.bitaspire.jdborm.query.TransactionCallback;
 import com.bitaspire.jdborm.query.UpdateQuery;
-import com.bitaspire.jdborm.exception.JdbOrmException;
 import com.bitaspire.jdborm.schema.Column;
 import com.bitaspire.jdborm.schema.Table;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * Entry point for the JdbORM fluent query builder API.
@@ -28,13 +35,13 @@ public class JdbORM {
     private final Connection connection;
     private final boolean useDataSource;
 
-    private JdbORM(DataSource dataSource) {
+    JdbORM(DataSource dataSource) {
         this.dataSource = dataSource;
         this.connection = null;
         this.useDataSource = true;
     }
 
-    private JdbORM(Connection connection) {
+    JdbORM(Connection connection) {
         this.dataSource = null;
         this.connection = connection;
         this.useDataSource = false;
@@ -66,7 +73,7 @@ public class JdbORM {
      * Creates a new JdbORM instance connected directly to the given JDBC URL.
      * The connection is managed internally and can be closed via {@link #close()}.
      *
-     * @param url      the JDBC connection URL (e.g. {@code "jdbc:hsqldb:mem:mydb"})
+     * @param url      the JDBC connection URL
      * @param user     the database user name
      * @param password the database password
      * @return a new JdbORM instance with an active connection
@@ -86,7 +93,7 @@ public class JdbORM {
      * with no authentication.
      * The connection is managed internally and can be closed via {@link #close()}.
      *
-     * @param url the JDBC connection URL (e.g. {@code "jdbc:hsqldb:mem:mydb"})
+     * @param url the JDBC connection URL
      * @return a new JdbORM instance with an active connection
      * @throws JdbOrmException if the connection cannot be established
      */
@@ -178,6 +185,146 @@ public class JdbORM {
      */
     public DeleteQuery delete(Table table) {
         return new DeleteQuery(this, table.reference());
+    }
+
+    /**
+     * Executes a raw SQL statement (INSERT/UPDATE/DELETE/DDL) with the given parameters.
+     * <p>
+     * Useful for one-off operations where the fluent builder is not needed.
+     * </p>
+     *
+     * @param sql    the SQL statement with {@code ?} placeholders
+     * @param params the parameter values for the placeholders
+     * @return the number of affected rows
+     * @throws JdbOrmException if execution fails
+     */
+    public int execute(String sql, Object... params) {
+        Connection conn = getConnection();
+        try {
+            return executeWithConnection(conn, sql, params);
+        } finally {
+            if (useDataSource && conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException ignored) {
+                }
+            }
+        }
+    }
+
+    private int executeWithConnection(Connection conn, String sql, Object... params) {
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            for (int i = 0; i < params.length; i++) {
+                stmt.setObject(i + 1, params[i]);
+            }
+            return stmt.executeUpdate();
+        } catch (SQLException e) {
+            throw new JdbOrmException("Failed to execute: " + sql, e);
+        }
+    }
+
+    /**
+     * Executes a raw SELECT query and maps each row using the given {@link RowMapper}.
+     *
+     * @param sql    the SELECT statement with {@code ?} placeholders
+     * @param mapper the row mapper to convert each row to the result type
+     * @param params the parameter values for the placeholders
+     * @param <T>    the result type
+     * @return list of mapped results (never null)
+     * @throws JdbOrmException if query execution or mapping fails
+     */
+    public <T> List<T> query(String sql, RowMapper<T> mapper, Object... params) {
+        Connection conn = getConnection();
+        try {
+            return queryWithConnection(conn, sql, mapper, params);
+        } finally {
+            if (useDataSource && conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException ignored) {
+                }
+            }
+        }
+    }
+
+    private <T> List<T> queryWithConnection(Connection conn, String sql, RowMapper<T> mapper, Object... params) {
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            for (int i = 0; i < params.length; i++) {
+                stmt.setObject(i + 1, params[i]);
+            }
+            try (ResultSet rs = stmt.executeQuery()) {
+                List<T> results = new ArrayList<>();
+                int rowNum = 0;
+                while (rs.next()) {
+                    results.add(mapper.mapRow(rs, rowNum++));
+                }
+                return results;
+            }
+        } catch (SQLException e) {
+            throw new JdbOrmException("Failed to query: " + sql, e);
+        }
+    }
+
+    /**
+     * Executes a raw SELECT query and maps the first result row to the given type.
+     * <p>
+     * Uses reflection-based mapping ({@link ResultMapper}) internally.
+     * Returns {@code null} if no rows match.
+     * </p>
+     *
+     * @param sql    the SELECT statement with {@code ?} placeholders
+     * @param type   the target class for the result
+     * @param params the parameter values for the placeholders
+     * @param <T>    the result type
+     * @return the first mapped row, or {@code null} if no results
+     * @throws JdbOrmException if query execution or mapping fails
+     */
+    public <T> T querySingle(String sql, Class<T> type, Object... params) {
+        List<T> results = query(sql, (rs, rowNum) -> {
+            ResultMapper mapper = new ResultMapper();
+            return mapper.mapRow(rs, type);
+        }, params);
+        return results.isEmpty() ? null : results.get(0);
+    }
+
+    /**
+     * Executes the given callback within a transaction.
+     * <p>
+     * A single connection is borrowed (or reused if already on a direct connection),
+     * auto-commit is set to {@code false}, and the callback receives a JdbORM instance
+     * that shares that connection. If the callback completes normally the transaction
+     * is committed; if any exception is thrown it is rolled back.
+     * </p>
+     *
+     * @param callback the transactional work to execute
+     * @param <T>      the return type of the callback
+     * @return the value returned by the callback
+     * @throws JdbOrmException if the transaction fails (the cause is the original exception)
+     */
+    public <T> T inTransaction(TransactionCallback<T> callback) {
+        Connection conn = getConnection();
+        boolean closeConn = useDataSource;
+        try {
+            conn.setAutoCommit(false);
+            JdbORM txDb = useDataSource ? new JdbORM(conn) : this;
+            T result = callback.execute(txDb);
+            conn.commit();
+            return result;
+        } catch (Exception e) {
+            try {
+                conn.rollback();
+            } catch (SQLException ignored) {
+            }
+            throw new JdbOrmException("Transaction failed", e);
+        } finally {
+            try {
+                conn.setAutoCommit(true);
+                if (closeConn) {
+                    conn.close();
+                }
+            } catch (SQLException ignored) {
+            }
+        }
     }
 
     /**

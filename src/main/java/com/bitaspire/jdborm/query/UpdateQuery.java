@@ -18,7 +18,8 @@ import java.util.Map;
  * <p>
  * Use {@link #set(String, Object)} (string-based) or
  * {@link #set(Column, Object)} (type-safe) to specify columns to update,
- * and optionally {@link #where(Condition)} to filter which rows are affected.
+ * optionally {@link #setRaw(String, String)} for raw SQL expressions,
+ * and {@link #where(Condition)} to filter which rows are affected.
  * </p>
  */
 public class UpdateQuery implements Query {
@@ -66,6 +67,35 @@ public class UpdateQuery implements Query {
     }
 
     /**
+     * Sets a column to a raw SQL expression instead of a parameterised value (string-based).
+     * <p>
+     * The expression is inserted verbatim into the SQL. Useful for expressions
+     * like {@code "counter + 1"}, {@code "NOW()"}, or {@code "DEFAULT"}.
+     * </p>
+     *
+     * @param column     the column name
+     * @param expression the raw SQL expression (e.g. {@code "NOW()"})
+     * @return this builder for chaining
+     */
+    public UpdateQuery setRaw(String column, String expression) {
+        values.put(column, new RawExpression(expression));
+        return this;
+    }
+
+    /**
+     * Sets a column to a raw SQL expression instead of a parameterised value (type-safe).
+     *
+     * @param column     the {@link Column} reference
+     * @param expression the raw SQL expression (e.g. {@code "counter + 1"})
+     * @param <T>        the column's value type
+     * @return this builder for chaining
+     */
+    public <T> UpdateQuery setRaw(Column<T> column, String expression) {
+        values.put(column.qualifiedName(), new RawExpression(expression));
+        return this;
+    }
+
+    /**
      * Adds a WHERE clause to filter which rows to update.
      *
      * @param condition the filter condition
@@ -88,7 +118,13 @@ public class UpdateQuery implements Query {
         List<String> columns = new ArrayList<>(values.keySet());
         for (int i = 0; i < columns.size(); i++) {
             if (i > 0) sql.append(", ");
-            sql.append(columns.get(i)).append(" = ?");
+            sql.append(columns.get(i)).append(" = ");
+            Object val = values.get(columns.get(i));
+            if (val instanceof RawExpression expr) {
+                sql.append(expr.expression());
+            } else {
+                sql.append("?");
+            }
         }
 
         if (where != null) {
@@ -101,7 +137,12 @@ public class UpdateQuery implements Query {
 
     @Override
     public List<Object> getParameters() {
-        List<Object> params = new ArrayList<>(values.values());
+        List<Object> params = new ArrayList<>();
+        for (Object val : values.values()) {
+            if (!(val instanceof RawExpression)) {
+                params.add(val);
+            }
+        }
         if (where != null) {
             where.appendTo(new StringBuilder(), params);
         }

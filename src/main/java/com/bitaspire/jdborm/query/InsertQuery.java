@@ -17,9 +17,10 @@ import java.util.Map;
 /**
  * Builder for INSERT queries.
  * <p>
- * Use {@link #set(String, Object)} (string-based) or
- * {@link #set(Column, Object)} (type-safe) to add column-value pairs,
- * then {@link #execute()} to run the insert and retrieve auto-generated keys.
+ * Supports setting column values via {@link #set(String, Object)} (string-based)
+ * or {@link #set(Column, Object)} (type-safe), raw SQL expression via
+ * {@link #setRaw(String, String)}, {@code ON CONFLICT} handling, and batch
+ * insertion via {@link #addBatch()}/{@link #executeBatch()}.
  * </p>
  */
 public class InsertQuery implements Query {
@@ -27,6 +28,9 @@ public class InsertQuery implements Query {
     private final JdbORM jdborm;
     private final String table;
     private final Map<String, Object> values = new LinkedHashMap<>();
+    private String onConflictAction;
+    private final List<Map<String, Object>> batchRows = new ArrayList<>();
+    private boolean inBatch;
 
     /**
      * Creates a new INSERT query builder for the given table.
@@ -65,38 +69,156 @@ public class InsertQuery implements Query {
         return this;
     }
 
+    /**
+     * Sets a column to a raw SQL expression instead of a parameterised value (string-based).
+     * <p>
+     * The expression is inserted verbatim into the SQL. Useful for database functions
+     * like {@code NOW()}, {@code DEFAULT}, or {@code GEN_RANDOM_UUID()}.
+     * </p>
+     *
+     * @param column     the column name
+     * @param expression the raw SQL expression (e.g. {@code "NOW()"})
+     * @return this builder for chaining
+     */
+    public InsertQuery setRaw(String column, String expression) {
+        values.put(column, new RawExpression(expression));
+        return this;
+    }
+
+    /**
+     * Sets a column to a raw SQL expression instead of a parameterised value (type-safe).
+     *
+     * @param column     the {@link Column} reference
+     * @param expression the raw SQL expression (e.g. {@code "NOW()"})
+     * @param <T>        the column's value type
+     * @return this builder for chaining
+     */
+    public <T> InsertQuery setRaw(Column<T> column, String expression) {
+        values.put(column.qualifiedName(), new RawExpression(expression));
+        return this;
+    }
+
+    /**
+     * Adds an {@code ON CONFLICT DO NOTHING} clause to the INSERT.
+     * <p>
+     * When a conflict occurs (e.g. on a unique constraint), no error is thrown
+     * and the row is simply not inserted.
+     * </p>
+     *
+     * @return this builder for chaining
+     */
+    public InsertQuery onConflictDoNothing() {
+        this.onConflictAction = "DO NOTHING";
+        return this;
+    }
+
+    /**
+     * Adds an {@code ON CONFLICT DO UPDATE SET ...} clause to the INSERT.
+     * <p>
+     * When a conflict occurs, the specified SET clauses are applied as an update.
+     * Each clause should be a string like {@code "col = EXCLUDED.col"}.
+     * </p>
+     *
+     * @param setClauses one or more SET clause strings (at least one required)
+     * @return this builder for chaining
+     * @throws JdbOrmException if no set clauses are provided
+     */
+    public InsertQuery onConflictDoUpdate(String... setClauses) {
+        if (setClauses.length == 0) {
+            throw new JdbOrmException("At least one SET clause required for ON CONFLICT DO UPDATE");
+        }
+        StringBuilder sb = new StringBuilder("DO UPDATE SET ");
+        for (int i = 0; i < setClauses.length; i++) {
+            if (i > 0) sb.append(", ");
+            sb.append(setClauses[i]);
+        }
+        this.onConflictAction = sb.toString();
+        return this;
+    }
+
+    /**
+     * Adds the current values as a batch row and clears the value map for the next row.
+     * <p>
+     * After calling this method once, subsequent calls to {@link #execute()} will
+     * generate a multi-row INSERT. Use {@link #executeBatch()} instead for
+     * {@link java.sql.PreparedStatement} batch execution.
+     * </p>
+     *
+     * @return this builder for chaining
+     * @throws JdbOrmException if no values have been set
+     */
+    public InsertQuery addBatch() {
+        if (values.isEmpty()) {
+            throw new JdbOrmException("No values to add to batch. Call set() first.");
+        }
+        batchRows.add(new LinkedHashMap<>(values));
+        values.clear();
+        inBatch = true;
+        return this;
+    }
+
     @Override
     public String toSql() {
-        if (values.isEmpty()) {
+        Map<String, Object> cols = !batchRows.isEmpty() ? batchRows.get(0) : values;
+        if (cols.isEmpty()) {
             throw new JdbOrmException("No values specified for INSERT");
         }
 
         StringBuilder sql = new StringBuilder();
         sql.append("INSERT INTO ").append(table).append(" (");
 
-        List<String> columns = new ArrayList<>(values.keySet());
+        List<String> columns = new ArrayList<>(cols.keySet());
         for (int i = 0; i < columns.size(); i++) {
             if (i > 0) sql.append(", ");
             sql.append(columns.get(i));
         }
 
-        sql.append(") VALUES (");
-        for (int i = 0; i < columns.size(); i++) {
-            if (i > 0) sql.append(", ");
-            sql.append("?");
+        sql.append(") VALUES ");
+        int rowCount = !batchRows.isEmpty() ? batchRows.size() : 1;
+        for (int r = 0; r < rowCount; r++) {
+            if (r > 0) sql.append(", ");
+            sql.append("(");
+            Map<String, Object> row = !batchRows.isEmpty() ? batchRows.get(r) : values;
+            List<String> rowCols = new ArrayList<>(row.keySet());
+            for (int i = 0; i < rowCols.size(); i++) {
+                if (i > 0) sql.append(", ");
+                Object val = row.get(rowCols.get(i));
+                if (val instanceof RawExpression expr) {
+                    sql.append(expr.expression());
+                } else {
+                    sql.append("?");
+                }
+            }
+            sql.append(")");
         }
-        sql.append(")");
+
+        if (onConflictAction != null) {
+            sql.append(" ON CONFLICT ").append(onConflictAction);
+        }
 
         return sql.toString();
     }
 
     @Override
     public List<Object> getParameters() {
-        return new ArrayList<>(values.values());
+        List<Object> params = new ArrayList<>();
+        List<Map<String, Object>> rows = !batchRows.isEmpty() ? batchRows : List.of(values);
+        for (Map<String, Object> row : rows) {
+            for (Object val : row.values()) {
+                if (!(val instanceof RawExpression)) {
+                    params.add(val);
+                }
+            }
+        }
+        return params;
     }
 
     /**
      * Executes the INSERT statement and returns the generated keys.
+     * <p>
+     * If batch rows have been added via {@link #addBatch()}, this generates
+     * a multi-row INSERT and returns all generated keys.
+     * </p>
      *
      * @return a {@link GeneratedKeys} object containing any auto-generated keys
      * @throws JdbOrmException if SQL execution fails
@@ -127,13 +249,58 @@ public class InsertQuery implements Query {
 
             GeneratedKeys keys = new GeneratedKeys();
             try (ResultSet rs = stmt.getGeneratedKeys()) {
-                if (rs.next()) {
+                while (rs.next()) {
                     keys.add("GENERATED_KEY", rs.getObject(1));
                 }
             }
             return keys;
         } catch (SQLException e) {
             throw new JdbOrmException("Failed to execute INSERT: " + sql, e);
+        }
+    }
+
+    /**
+     * Executes the accumulated batch rows using {@link PreparedStatement#executeBatch()}.
+     * <p>
+     * Call {@link #addBatch()} at least once before invoking this method.
+     * </p>
+     *
+     * @return an array of update counts (one per batch row)
+     * @throws JdbOrmException if no batch rows have been added or execution fails
+     */
+    public int[] executeBatch() {
+        if (batchRows.isEmpty()) {
+            throw new JdbOrmException("No batch rows added. Call addBatch() first.");
+        }
+
+        Connection conn = jdborm.getConnection();
+        try {
+            return executeBatchWithConnection(conn);
+        } finally {
+            if (jdborm.isUseDataSource() && conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException ignored) {
+                }
+            }
+        }
+    }
+
+    private int[] executeBatchWithConnection(Connection conn) {
+        String sql = toSql();
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            for (Map<String, Object> row : batchRows) {
+                int idx = 1;
+                for (Object val : row.values()) {
+                    if (!(val instanceof RawExpression)) {
+                        stmt.setObject(idx++, val);
+                    }
+                }
+                stmt.addBatch();
+            }
+            return stmt.executeBatch();
+        } catch (SQLException e) {
+            throw new JdbOrmException("Failed to execute batch INSERT", e);
         }
     }
 

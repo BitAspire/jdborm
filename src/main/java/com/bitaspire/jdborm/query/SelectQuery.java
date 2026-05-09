@@ -4,6 +4,7 @@ import com.bitaspire.jdborm.JdbORM;
 import com.bitaspire.jdborm.exception.JdbOrmException;
 import com.bitaspire.jdborm.condition.Condition;
 import com.bitaspire.jdborm.mapper.ResultMapper;
+import com.bitaspire.jdborm.mapper.RowMapper;
 import com.bitaspire.jdborm.schema.Column;
 import com.bitaspire.jdborm.schema.Table;
 
@@ -19,9 +20,10 @@ import java.util.List;
  * Builder for SELECT queries.
  * <p>
  * Supports selecting specific columns (or all with {@code *}), FROM clause,
- * WHERE with conditions, ORDER BY (ASC/DESC), LIMIT, OFFSET, and JOINs
- * (INNER, LEFT, RIGHT). Both string-based and type-safe ({@link Column},
- * {@link Table}) overloads are provided.
+ * WHERE with conditions, ORDER BY (ASC/DESC), LIMIT, OFFSET, JOINs
+ * (INNER, LEFT, RIGHT), custom {@link RowMapper}, and scalar results.
+ * Both string-based and type-safe ({@link Column}, {@link Table}) overloads
+ * are provided.
  * </p>
  */
 public class SelectQuery implements Query {
@@ -296,7 +298,7 @@ public class SelectQuery implements Query {
 
     /**
      * Executes the SELECT query and maps the result rows to a list of objects
-     * of the given type.
+     * of the given type using reflection-based mapping.
      *
      * @param type the target class for result row mapping
      * @param <T>  the result type
@@ -317,6 +319,50 @@ public class SelectQuery implements Query {
         }
     }
 
+    /**
+     * Executes the SELECT query and maps each row using the given {@link RowMapper}.
+     * <p>
+     * This overload does not use reflection and is useful for custom mapping
+     * logic or when the result type does not follow JavaBean conventions.
+     * </p>
+     *
+     * @param mapper the row mapper to convert each row to the result type
+     * @param <T>    the result type
+     * @return list of mapped results (never null)
+     * @throws JdbOrmException if SQL execution or mapping fails
+     */
+    public <T> List<T> execute(RowMapper<T> mapper) {
+        Connection conn = jdborm.getConnection();
+        try {
+            return executeWithConnection(conn, mapper);
+        } finally {
+            if (jdborm.isUseDataSource() && conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException ignored) {
+                }
+            }
+        }
+    }
+
+    /**
+     * Executes the SELECT query and returns the first column of the first row
+     * as a scalar value of the given type.
+     * <p>
+     * Returns {@code null} if no rows match. Uses reflection-based mapping
+     * internally.
+     * </p>
+     *
+     * @param type the expected scalar type (e.g. {@code Long.class} for {@code count(*)})
+     * @param <T>  the result type
+     * @return the scalar value of the first row, or {@code null} if no results
+     * @throws JdbOrmException if SQL execution or mapping fails
+     */
+    public <T> T executeScalar(Class<T> type) {
+        List<T> results = execute(type);
+        return results.isEmpty() ? null : results.get(0);
+    }
+
     private <T> List<T> executeWithConnection(Connection conn, Class<T> type) {
         String sql = toSql();
         List<Object> params = getParameters();
@@ -328,6 +374,27 @@ public class SelectQuery implements Query {
             try (ResultSet rs = stmt.executeQuery()) {
                 ResultMapper mapper = new ResultMapper();
                 return mapper.mapAll(rs, type);
+            }
+        } catch (SQLException e) {
+            throw new JdbOrmException("Failed to execute SELECT: " + sql, e);
+        }
+    }
+
+    private <T> List<T> executeWithConnection(Connection conn, RowMapper<T> mapper) {
+        String sql = toSql();
+        List<Object> params = getParameters();
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            for (int i = 0; i < params.size(); i++) {
+                stmt.setObject(i + 1, params.get(i));
+            }
+            try (ResultSet rs = stmt.executeQuery()) {
+                List<T> results = new ArrayList<>();
+                int rowNum = 0;
+                while (rs.next()) {
+                    results.add(mapper.mapRow(rs, rowNum++));
+                }
+                return results;
             }
         } catch (SQLException e) {
             throw new JdbOrmException("Failed to execute SELECT: " + sql, e);
