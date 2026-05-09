@@ -2,8 +2,6 @@
 .gradle/
 build/
 
-# Gradle credentials (may contain tokens)
-gradle.properties
 
 # IDE - IntelliJ IDEA
 .idea/

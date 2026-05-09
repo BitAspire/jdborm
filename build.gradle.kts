@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.bitaspire"
-version = "0.1.1"
+version = "0.1.2"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
@@ -69,14 +69,4 @@ publishing {
         }
     }
 
-    repositories {
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/BitAspire/jdborm")
-            credentials {
-                username = project.findProperty("gpr.user") as String? ?: System.getenv("GITHUB_ACTOR")
-                password = project.findProperty("gpr.key") as String? ?: System.getenv("GITHUB_TOKEN")
-            }
-        }
-    }
 }
