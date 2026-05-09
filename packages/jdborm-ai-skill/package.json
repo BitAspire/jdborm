@@ -1,0 +1,27 @@
+{
+  "name": "jdborm-ai-skill",
+  "version": "0.1.0",
+  "description": "Install jdborm AI skill into your project. Gives AI coding assistants deep knowledge of the jdborm fluent JDBC query builder API.",
+  "bin": {
+    "jdborm-ai-skill": "install.js"
+  },
+  "files": [
+    "SKILL.md",
+    "install.js"
+  ],
+  "keywords": [
+    "jdborm",
+    "jdbc",
+    "orm",
+    "sql",
+    "query-builder",
+    "ai",
+    "skill",
+    "opencode"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BitAspire/jdbc-orm-manager"
+  }
+}
