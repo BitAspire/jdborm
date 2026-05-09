@@ -606,6 +606,20 @@ class SqlGenerationTest {
         assertEquals("ALTER TABLE users DROP COLUMN age", q.toSql());
     }
 
+    @Test
+    void alterTableAddColumnIfNotExists() {
+        AlterTableQuery q = new AlterTableQuery(null, "users");
+        q.addColumnIfNotExists("age", "INTEGER");
+        assertEquals("ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER", q.toSql());
+    }
+
+    @Test
+    void alterTableAddColumnIfNotExistsTypeSafe() {
+        AlterTableQuery q = new AlterTableQuery(null, "users");
+        q.addColumnIfNotExists(AGE, "INTEGER DEFAULT 0");
+        assertEquals("ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER DEFAULT 0", q.toSql());
+    }
+
     // ── DDL: DROP TABLE tests ──────────────────────────────────────────────
 
     @Test

@@ -20,7 +20,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.BitAspire:jdborm:0.3.0")
+    implementation("com.github.BitAspire:jdborm:0.3.1")
 }
 ```
 
@@ -37,7 +37,7 @@ dependencies {
 <dependency>
     <groupId>com.github.BitAspire</groupId>
     <artifactId>jdborm</artifactId>
-    <version>0.3.0</version>
+    <version>0.3.1</version>
 </dependency>
 ```
 
@@ -155,6 +155,10 @@ List<Post> posts = db.select("u.id", "p.title")
 | `DeleteQuery` | `.where()` | `int` (affected rows) |
 
 All builders support `.toSql()` and `.getParameters()` for debugging.
+
+## Features added in v0.3.1
+
+- `addColumnIfNotExists()` on `AlterTableQuery` — safe ADD COLUMN for PostgreSQL and others
 
 ## Features added in v0.3.0
 

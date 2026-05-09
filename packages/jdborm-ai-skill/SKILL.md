@@ -61,6 +61,7 @@ db.createTable("users")
 // ALTER TABLE
 db.alterTable("users")
     .addColumn("age", "INTEGER DEFAULT 0")
+    .addColumnIfNotExists("email_verified", "BOOLEAN DEFAULT FALSE")
     .modifyColumn("name", "VARCHAR(200)")
     .renameColumn("email", "email_address")
     .dropColumn("old_field")

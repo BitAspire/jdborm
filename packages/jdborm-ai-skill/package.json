@@ -1,6 +1,6 @@
 {
   "name": "jdborm-ai-skill",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Install jdborm AI skill into your project. Gives AI coding assistants deep knowledge of the jdborm fluent JDBC query builder API.",
   "bin": {
     "jdborm-ai-skill": "install.js"

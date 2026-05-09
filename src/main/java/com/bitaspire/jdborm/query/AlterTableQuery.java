@@ -13,9 +13,9 @@ import java.util.List;
 /**
  * Builder for ALTER TABLE statements.
  * <p>
- * Supports ADD COLUMN, DROP COLUMN, RENAME COLUMN, MODIFY COLUMN,
- * ADD CONSTRAINT (PRIMARY KEY, FOREIGN KEY, UNIQUE), DROP CONSTRAINT,
- * and RENAME TABLE operations.
+ * Supports ADD COLUMN (with optional IF NOT EXISTS), DROP COLUMN, RENAME COLUMN,
+ * MODIFY COLUMN, ADD CONSTRAINT (PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK),
+ * DROP CONSTRAINT, and DROP PRIMARY KEY operations.
  * </p>
  */
 public class AlterTableQuery implements Query {
@@ -57,6 +57,30 @@ public class AlterTableQuery implements Query {
      */
     public AlterTableQuery addColumn(Column<?> column, String definition) {
         clauses.add("ADD COLUMN " + column.name() + " " + definition);
+        return this;
+    }
+
+    /**
+     * Adds a column with IF NOT EXISTS (supported by PostgreSQL and others).
+     *
+     * @param name       the column name
+     * @param definition the column type and constraints
+     * @return this builder for chaining
+     */
+    public AlterTableQuery addColumnIfNotExists(String name, String definition) {
+        clauses.add("ADD COLUMN IF NOT EXISTS " + name + " " + definition);
+        return this;
+    }
+
+    /**
+     * Adds a column with IF NOT EXISTS using a type-safe {@link Column} reference.
+     *
+     * @param column     the column reference
+     * @param definition the column type and constraints
+     * @return this builder for chaining
+     */
+    public AlterTableQuery addColumnIfNotExists(Column<?> column, String definition) {
+        clauses.add("ADD COLUMN IF NOT EXISTS " + column.name() + " " + definition);
         return this;
     }
 
