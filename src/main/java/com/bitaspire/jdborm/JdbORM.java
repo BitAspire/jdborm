@@ -3,10 +3,17 @@ package com.bitaspire.jdborm;
 import com.bitaspire.jdborm.exception.JdbOrmException;
 import com.bitaspire.jdborm.mapper.ResultMapper;
 import com.bitaspire.jdborm.mapper.RowMapper;
+import com.bitaspire.jdborm.query.AlterTableQuery;
+import com.bitaspire.jdborm.query.CreateIndexQuery;
+import com.bitaspire.jdborm.query.CreateTableQuery;
 import com.bitaspire.jdborm.query.DeleteQuery;
+import com.bitaspire.jdborm.query.DropIndexQuery;
+import com.bitaspire.jdborm.query.DropTableQuery;
 import com.bitaspire.jdborm.query.InsertQuery;
+import com.bitaspire.jdborm.query.RenameTableQuery;
 import com.bitaspire.jdborm.query.SelectQuery;
 import com.bitaspire.jdborm.query.TransactionCallback;
+import com.bitaspire.jdborm.query.TruncateQuery;
 import com.bitaspire.jdborm.query.UpdateQuery;
 import com.bitaspire.jdborm.schema.Column;
 import com.bitaspire.jdborm.schema.Table;
@@ -185,6 +192,117 @@ public class JdbORM {
      */
     public DeleteQuery delete(Table table) {
         return new DeleteQuery(this, table.reference());
+    }
+
+    /**
+     * Starts building a CREATE TABLE statement.
+     *
+     * @param table the table name to create
+     * @return a new {@link CreateTableQuery} builder
+     */
+    public CreateTableQuery createTable(String table) {
+        return new CreateTableQuery(this, table);
+    }
+
+    /**
+     * Starts building a CREATE TABLE statement for the given type-safe table.
+     *
+     * @param table the {@link Table} to create
+     * @return a new {@link CreateTableQuery} builder
+     */
+    public CreateTableQuery createTable(Table table) {
+        return new CreateTableQuery(this, table.reference());
+    }
+
+    /**
+     * Starts building an ALTER TABLE statement.
+     *
+     * @param table the table name to alter
+     * @return a new {@link AlterTableQuery} builder
+     */
+    public AlterTableQuery alterTable(String table) {
+        return new AlterTableQuery(this, table);
+    }
+
+    /**
+     * Starts building an ALTER TABLE statement for the given type-safe table.
+     *
+     * @param table the {@link Table} to alter
+     * @return a new {@link AlterTableQuery} builder
+     */
+    public AlterTableQuery alterTable(Table table) {
+        return new AlterTableQuery(this, table.reference());
+    }
+
+    /**
+     * Starts building a DROP TABLE statement.
+     *
+     * @param table the table name to drop
+     * @return a new {@link DropTableQuery} builder
+     */
+    public DropTableQuery dropTable(String table) {
+        return new DropTableQuery(this, table);
+    }
+
+    /**
+     * Starts building a DROP TABLE statement for the given type-safe table.
+     *
+     * @param table the {@link Table} to drop
+     * @return a new {@link DropTableQuery} builder
+     */
+    public DropTableQuery dropTable(Table table) {
+        return new DropTableQuery(this, table.reference());
+    }
+
+    /**
+     * Starts building a TRUNCATE TABLE statement.
+     *
+     * @param table the table name to truncate
+     * @return a new {@link TruncateQuery} builder
+     */
+    public TruncateQuery truncateTable(String table) {
+        return new TruncateQuery(this, table);
+    }
+
+    /**
+     * Starts building a TRUNCATE TABLE statement for the given type-safe table.
+     *
+     * @param table the {@link Table} to truncate
+     * @return a new {@link TruncateQuery} builder
+     */
+    public TruncateQuery truncateTable(Table table) {
+        return new TruncateQuery(this, table.reference());
+    }
+
+    /**
+     * Starts building a RENAME TABLE statement.
+     *
+     * @param oldName the current table name
+     * @param newName the new table name
+     * @return a new {@link RenameTableQuery} builder
+     */
+    public RenameTableQuery renameTable(String oldName, String newName) {
+        return new RenameTableQuery(this, oldName, newName);
+    }
+
+    /**
+     * Starts building a CREATE INDEX statement.
+     *
+     * @param indexName the name of the index to create
+     * @return a new {@link CreateIndexQuery} builder
+     */
+    public CreateIndexQuery createIndex(String indexName) {
+        return new CreateIndexQuery(this, indexName);
+    }
+
+    /**
+     * Starts building a DROP INDEX statement.
+     *
+     * @param indexName the name of the index to drop
+     * @return a new {@link DropIndexQuery} builder
+     */
+    public DropIndexQuery dropIndex(String indexName) {
+        return new DropIndexQuery(this, indexName);
     }
 
     /**

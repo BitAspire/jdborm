@@ -20,7 +20,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.BitAspire:jdborm:0.2.1")
+    implementation("com.github.BitAspire:jdborm:0.3.0")
 }
 ```
 
@@ -37,7 +37,7 @@ dependencies {
 <dependency>
     <groupId>com.github.BitAspire</groupId>
     <artifactId>jdborm</artifactId>
-    <version>0.2.1</version>
+    <version>0.3.0</version>
 </dependency>
 ```
 
@@ -155,6 +155,15 @@ List<Post> posts = db.select("u.id", "p.title")
 | `DeleteQuery` | `.where()` | `int` (affected rows) |
 
 All builders support `.toSql()` and `.getParameters()` for debugging.
+
+## Features added in v0.3.0
+
+- DDL schema management: `createTable()`, `alterTable()`, `dropTable()`
+- `truncateTable()`, `renameTable()` for table management
+- `createIndex()`, `dropIndex()` for index management
+- Table-level constraints: PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK
+- IF EXISTS / IF NOT EXISTS and CASCADE support
+- Full type-safe API via `Table` and `Column` overloads
 
 ## Features added in v0.2.1
 

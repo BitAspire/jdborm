@@ -1,9 +1,16 @@
 package com.bitaspire.jdborm;
 
 import com.bitaspire.jdborm.condition.Conditions;
+import com.bitaspire.jdborm.query.AlterTableQuery;
+import com.bitaspire.jdborm.query.CreateIndexQuery;
+import com.bitaspire.jdborm.query.CreateTableQuery;
 import com.bitaspire.jdborm.query.DeleteQuery;
+import com.bitaspire.jdborm.query.DropIndexQuery;
+import com.bitaspire.jdborm.query.DropTableQuery;
 import com.bitaspire.jdborm.query.InsertQuery;
+import com.bitaspire.jdborm.query.RenameTableQuery;
 import com.bitaspire.jdborm.query.SelectQuery;
+import com.bitaspire.jdborm.query.TruncateQuery;
 import com.bitaspire.jdborm.query.UpdateQuery;
 import com.bitaspire.jdborm.schema.Column;
 import com.bitaspire.jdborm.schema.Table;
@@ -512,5 +519,208 @@ class SqlGenerationTest {
         q.where(eq(U_NAME, "Alice"));
         assertEquals("SELECT u.id, u.name, p.title FROM users u INNER JOIN posts p ON p.user_id = u.id WHERE u.name = ?", q.toSql());
         assertEquals(List.of("Alice"), q.getParameters());
+    }
+
+    // ── DDL: CREATE TABLE tests ────────────────────────────────────────────
+
+    @Test
+    void createTableBasic() {
+        CreateTableQuery q = new CreateTableQuery(null, "users");
+        q.column("id", "BIGINT AUTO_INCREMENT PRIMARY KEY")
+                .column("name", "VARCHAR(100) NOT NULL")
+                .column("email", "VARCHAR(255) NOT NULL UNIQUE");
+        assertEquals("CREATE TABLE users (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100) NOT NULL, email VARCHAR(255) NOT NULL UNIQUE)", q.toSql());
+    }
+
+    @Test
+    void createTableWithIfNotExists() {
+        CreateTableQuery q = new CreateTableQuery(null, "users");
+        q.column("id", "INTEGER PRIMARY KEY").ifNotExists();
+        assertEquals("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY)", q.toSql());
+    }
+
+    @Test
+    void createTableWithTableConstraints() {
+        CreateTableQuery q = new CreateTableQuery(null, "orders");
+        q.column("id", "INTEGER")
+                .column("user_id", "INTEGER NOT NULL")
+                .column("order_code", "VARCHAR(50) NOT NULL")
+                .primaryKey("id")
+                .foreignKey("user_id", "users(id)")
+                .unique("order_code")
+                .check("id > 0");
+        assertEquals("CREATE TABLE orders (id INTEGER, user_id INTEGER NOT NULL, order_code VARCHAR(50) NOT NULL, PRIMARY KEY (id), FOREIGN KEY (user_id) REFERENCES users(id), UNIQUE (order_code), CHECK (id > 0))", q.toSql());
+    }
+
+    @Test
+    void createTableTypeSafeColumn() {
+        CreateTableQuery q = new CreateTableQuery(null, "users");
+        q.column(ID, "INTEGER PRIMARY KEY").column(NAME, "VARCHAR(100) NOT NULL");
+        assertEquals("CREATE TABLE users (id INTEGER PRIMARY KEY, name VARCHAR(100) NOT NULL)", q.toSql());
+    }
+
+    // ── DDL: ALTER TABLE tests ─────────────────────────────────────────────
+
+    @Test
+    void alterTableAddColumn() {
+        AlterTableQuery q = new AlterTableQuery(null, "users");
+        q.addColumn("age", "INTEGER");
+        assertEquals("ALTER TABLE users ADD COLUMN age INTEGER", q.toSql());
+    }
+
+    @Test
+    void alterTableMultiple() {
+        AlterTableQuery q = new AlterTableQuery(null, "users");
+        q.addColumn("age", "INTEGER DEFAULT 0")
+                .dropColumn("old_field")
+                .modifyColumn("name", "VARCHAR(200)")
+                .renameColumn("email", "email_address");
+        assertEquals("ALTER TABLE users ADD COLUMN age INTEGER DEFAULT 0, ALTER TABLE users DROP COLUMN old_field, ALTER TABLE users MODIFY COLUMN name VARCHAR(200), ALTER TABLE users RENAME COLUMN email TO email_address", q.toSql());
+    }
+
+    @Test
+    void alterTableConstraints() {
+        AlterTableQuery q = new AlterTableQuery(null, "orders");
+        q.addPrimaryKey("id")
+                .addForeignKey("user_id", "users(id)")
+                .addUnique("order_code")
+                .addCheck("amount > 0")
+                .dropConstraint("old_constraint")
+                .dropPrimaryKey();
+        assertEquals(
+                "ALTER TABLE orders ADD PRIMARY KEY (id), ALTER TABLE orders ADD FOREIGN KEY (user_id) REFERENCES users(id), ALTER TABLE orders ADD UNIQUE (order_code), ALTER TABLE orders ADD CHECK (amount > 0), ALTER TABLE orders DROP CONSTRAINT old_constraint, ALTER TABLE orders DROP PRIMARY KEY",
+                q.toSql());
+    }
+
+    @Test
+    void alterTableAddColumnTypeSafe() {
+        AlterTableQuery q = new AlterTableQuery(null, "users");
+        q.addColumn(AGE, "INTEGER DEFAULT 0");
+        assertEquals("ALTER TABLE users ADD COLUMN age INTEGER DEFAULT 0", q.toSql());
+    }
+
+    @Test
+    void alterTableDropColumnTypeSafe() {
+        AlterTableQuery q = new AlterTableQuery(null, "users");
+        q.dropColumn(AGE);
+        assertEquals("ALTER TABLE users DROP COLUMN age", q.toSql());
+    }
+
+    // ── DDL: DROP TABLE tests ──────────────────────────────────────────────
+
+    @Test
+    void dropTable() {
+        DropTableQuery q = new DropTableQuery(null, "users");
+        assertEquals("DROP TABLE users", q.toSql());
+    }
+
+    @Test
+    void dropTableIfExists() {
+        DropTableQuery q = new DropTableQuery(null, "users");
+        q.ifExists();
+        assertEquals("DROP TABLE IF EXISTS users", q.toSql());
+    }
+
+    @Test
+    void dropTableCascade() {
+        DropTableQuery q = new DropTableQuery(null, "users");
+        q.cascade();
+        assertEquals("DROP TABLE users CASCADE", q.toSql());
+    }
+
+    @Test
+    void dropTableIfExistsCascade() {
+        DropTableQuery q = new DropTableQuery(null, "users");
+        q.ifExists().cascade();
+        assertEquals("DROP TABLE IF EXISTS users CASCADE", q.toSql());
+    }
+
+    // ── DDL: TRUNCATE TABLE tests ──────────────────────────────────────────
+
+    @Test
+    void truncateTable() {
+        TruncateQuery q = new TruncateQuery(null, "users");
+        assertEquals("TRUNCATE TABLE users", q.toSql());
+    }
+
+    // ── DDL: RENAME TABLE tests ────────────────────────────────────────────
+
+    @Test
+    void renameTable() {
+        RenameTableQuery q = new RenameTableQuery(null, "users", "customers");
+        assertEquals("RENAME TABLE users TO customers", q.toSql());
+    }
+
+    // ── DDL: CREATE INDEX tests ────────────────────────────────────────────
+
+    @Test
+    void createIndex() {
+        CreateIndexQuery q = new CreateIndexQuery(null, "idx_users_email");
+        q.on("users", "email");
+        assertEquals("CREATE INDEX idx_users_email ON users (email)", q.toSql());
+    }
+
+    @Test
+    void createIndexUnique() {
+        CreateIndexQuery q = new CreateIndexQuery(null, "idx_users_email");
+        q.on("users", "email").unique();
+        assertEquals("CREATE UNIQUE INDEX idx_users_email ON users (email)", q.toSql());
+    }
+
+    @Test
+    void createIndexIfNotExists() {
+        CreateIndexQuery q = new CreateIndexQuery(null, "idx_users_email");
+        q.on("users", "email").ifNotExists();
+        assertEquals("CREATE INDEX IF NOT EXISTS idx_users_email ON users (email)", q.toSql());
+    }
+
+    @Test
+    void createIndexUsingMethod() {
+        CreateIndexQuery q = new CreateIndexQuery(null, "idx_users_email");
+        q.on("users", "email").using("HASH");
+        assertEquals("CREATE INDEX idx_users_email ON users USING HASH (email)", q.toSql());
+    }
+
+    @Test
+    void createIndexMultipleColumns() {
+        CreateIndexQuery q = new CreateIndexQuery(null, "idx_users_name");
+        q.on("users", "last_name", "first_name");
+        assertEquals("CREATE INDEX idx_users_name ON users (last_name, first_name)", q.toSql());
+    }
+
+    @Test
+    void createIndexTypeSafeColumns() {
+        CreateIndexQuery q = new CreateIndexQuery(null, "idx_users_age_score");
+        q.on("users", AGE, SCORE);
+        assertEquals("CREATE INDEX idx_users_age_score ON users (age, score)", q.toSql());
+    }
+
+    // ── DDL: DROP INDEX tests ──────────────────────────────────────────────
+
+    @Test
+    void dropIndex() {
+        DropIndexQuery q = new DropIndexQuery(null, "idx_users_email");
+        assertEquals("DROP INDEX idx_users_email", q.toSql());
+    }
+
+    @Test
+    void dropIndexIfExists() {
+        DropIndexQuery q = new DropIndexQuery(null, "idx_users_email");
+        q.ifExists();
+        assertEquals("DROP INDEX IF EXISTS idx_users_email", q.toSql());
+    }
+
+    @Test
+    void dropIndexOnTable() {
+        DropIndexQuery q = new DropIndexQuery(null, "idx_users_email");
+        q.on("users");
+        assertEquals("DROP INDEX users.idx_users_email", q.toSql());
+    }
+
+    @Test
+    void dropIndexCascade() {
+        DropIndexQuery q = new DropIndexQuery(null, "idx_users_email");
+        q.cascade();
+        assertEquals("DROP INDEX idx_users_email CASCADE", q.toSql());
     }
 }
