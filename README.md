@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Java 17+](https://img.shields.io/badge/Java-17%2B-blue.svg)](https://openjdk.org/projects/jdk/17/)
-[![JitPack](https://img.shields.io/jitpack/v/com.github.BitAspire/jdbc-orm-manager)](https://jitpack.io/#BitAspire/jdbc-orm-manager)
+[![JitPack](https://img.shields.io/jitpack/v/com.github.BitAspire/jdborm)](https://jitpack.io/#BitAspire/jdborm)
 
 A lightweight, zero-dependency Java library inspired by [Drizzle ORM](https://orm.drizzle.team).  
 Write type-safe SQL queries using fluent method chaining instead of raw string concatenation.
@@ -20,7 +20,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.BitAspire:jdbc-orm-manager:0.1.3")
+    implementation("com.github.BitAspire:jdborm:0.1.3")
 }
 ```
 
@@ -36,8 +36,8 @@ dependencies {
 
 <dependency>
     <groupId>com.github.BitAspire</groupId>
-    <artifactId>jdbc-orm-manager</artifactId>
-    <version>0.1.2</version>
+    <artifactId>jdborm</artifactId>
+    <version>0.1.3</version>
 </dependency>
 ```
 

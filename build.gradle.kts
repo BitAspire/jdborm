@@ -43,7 +43,7 @@ publishing {
             pom {
                 name = "jdborm"
                 description = "Lightweight JDBC ORM library with fluent API"
-                url = "https://github.com/BitAspire/jdbc-orm-manager"
+                url = "https://github.com/BitAspire/jdborm"
 
                 licenses {
                     license {
@@ -61,9 +61,9 @@ publishing {
                 }
 
                 scm {
-                    connection = "scm:git:git://github.com/BitAspire/jdbc-orm-manager.git"
-                    developerConnection = "scm:git:ssh://github.com/BitAspire/jdbc-orm-manager.git"
-                    url = "https://github.com/BitAspire/jdbc-orm-manager"
+                    connection = "scm:git:git://github.com/BitAspire/jdborm.git"
+                    developerConnection = "scm:git:ssh://github.com/BitAspire/jdborm.git"
+                    url = "https://github.com/BitAspire/jdborm"
                 }
             }
         }
