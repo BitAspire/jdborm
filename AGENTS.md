@@ -155,13 +155,13 @@ Internal records in `Condition.java`:
 
 Reflection-based: matches `ResultSet` column names to Java object fields (case-insensitive, underscores → camelCase). Supports primitives, wrappers, String, enums.
 
-## Typické použití (end-to-end)
+## End-to-end usage
 
 ```java
-// 1. Vytvoření instance
+// 1. Create instance
 JdbORM db = JdbORM.create(dataSource);
 
-// 2. SELECT s podmínkami a řazením
+// 2. SELECT with conditions and ordering
 List<User> users = db.select("id", "name", "email")
     .from("users")
     .where(eq("age", 18).and(gt("score", 100)))
@@ -193,7 +193,7 @@ List<Post> posts = db.select("u.id", "p.title")
     .leftJoin("comments c", "c.post_id", "p.id")
     .execute(Post.class);
 
-// 7. Složené podmínky
+// 7. Compound conditions
 where(and(
     eq("status", "active"),
     or(eq("role", "admin"), eq("role", "moderator")),
