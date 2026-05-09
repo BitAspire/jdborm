@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Java 17+](https://img.shields.io/badge/Java-17%2B-blue.svg)](https://openjdk.org/projects/jdk/17/)
-[![Maven Central](https://img.shields.io/maven-central/v/com.bitaspire/jdborm)](https://search.maven.org/artifact/com.bitaspire/jdborm)
+[![JitPack](https://img.shields.io/jitpack/v/com.github.BitAspire/jdbc-orm-manager)](https://jitpack.io/#BitAspire/jdbc-orm-manager)
 
 A lightweight, zero-dependency Java library inspired by [Drizzle ORM](https://orm.drizzle.team).  
 Write type-safe SQL queries using fluent method chaining instead of raw string concatenation.
@@ -11,8 +11,34 @@ Write type-safe SQL queries using fluent method chaining instead of raw string c
 
 ### 1. Add dependency
 
-```groovy
-implementation 'com.bitaspire:jdborm:0.1.0'
+**Gradle:**
+
+```kotlin
+repositories {
+    mavenCentral()
+    maven { url = uri("https://jitpack.io") }
+}
+
+dependencies {
+    implementation("com.github.BitAspire:jdbc-orm-manager:0.1.1")
+}
+```
+
+**Maven:**
+
+```xml
+<repositories>
+    <repository>
+        <id>jitpack.io</id>
+        <url>https://jitpack.io</url>
+    </repository>
+</repositories>
+
+<dependency>
+    <groupId>com.github.BitAspire</groupId>
+    <artifactId>jdbc-orm-manager</artifactId>
+    <version>0.1.1</version>
+</dependency>
 ```
 
 ### 2. Use it
