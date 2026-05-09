@@ -20,7 +20,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.BitAspire:jdborm:0.2.0")
+    implementation("com.github.BitAspire:jdborm:0.2.1")
 }
 ```
 
@@ -37,7 +37,7 @@ dependencies {
 <dependency>
     <groupId>com.github.BitAspire</groupId>
     <artifactId>jdborm</artifactId>
-    <version>0.2.0</version>
+    <version>0.2.1</version>
 </dependency>
 ```
 
@@ -156,7 +156,7 @@ List<Post> posts = db.select("u.id", "p.title")
 
 All builders support `.toSql()` and `.getParameters()` for debugging.
 
-## Features added in v0.2.0
+## Features added in v0.2.1
 
 - Raw SQL execution (`execute()`, `query()`, `querySingle()`)
 - `setRaw()` for SQL expressions in INSERT/UPDATE (`NOW()`, `counter + 1`, etc.)
