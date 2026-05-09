@@ -3,6 +3,7 @@ package com.bitaspire.jdborm.query;
 import com.bitaspire.jdborm.JdbORM;
 import com.bitaspire.jdborm.exception.JdbOrmException;
 import com.bitaspire.jdborm.condition.Condition;
+import com.bitaspire.jdborm.schema.Column;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -15,8 +16,9 @@ import java.util.Map;
 /**
  * Builder for UPDATE queries.
  * <p>
- * Use {@link #set(String, Object)} to specify columns to update and
- * optionally {@link #where(Condition)} to filter which rows are affected.
+ * Use {@link #set(String, Object)} (string-based) or
+ * {@link #set(Column, Object)} (type-safe) to specify columns to update,
+ * and optionally {@link #where(Condition)} to filter which rows are affected.
  * </p>
  */
 public class UpdateQuery implements Query {
@@ -38,7 +40,7 @@ public class UpdateQuery implements Query {
     }
 
     /**
-     * Sets a column to a new value.
+     * Sets a column to a new value (string-based).
      *
      * @param column the column name
      * @param value  the new value
@@ -46,6 +48,20 @@ public class UpdateQuery implements Query {
      */
     public UpdateQuery set(String column, Object value) {
         values.put(column, value);
+        return this;
+    }
+
+    /**
+     * Sets a column to a new value (type-safe).
+     * The compiler ensures the value type matches the column type.
+     *
+     * @param column the {@link Column} reference
+     * @param value  the new value (must match the column's type)
+     * @param <T>    the column's value type
+     * @return this builder for chaining
+     */
+    public <T> UpdateQuery set(Column<T> column, T value) {
+        values.put(column.qualifiedName(), value);
         return this;
     }
 

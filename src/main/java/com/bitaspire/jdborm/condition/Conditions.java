@@ -1,5 +1,7 @@
 package com.bitaspire.jdborm.condition;
 
+import com.bitaspire.jdborm.schema.Column;
+
 /**
  * Static factory for constructing {@link Condition} objects.
  * <p>
@@ -9,12 +11,18 @@ package com.bitaspire.jdborm.condition;
  * import static com.bitaspire.jdborm.condition.Conditions.*;
  *
  * where(eq("age", 18).and(gt("score", 100)))
+ *
+ * // Type-safe variants using Column&lt;T&gt;:
+ * Column&lt;Integer&gt; AGE = Column.of("age");
+ * where(eq(AGE, 18));
  * }</pre>
  */
 public final class Conditions {
 
     private Conditions() {
     }
+
+    // ── String-based (legacy) ────────────────────────────────────────────
 
     /** Equal to: {@code column = ?}. */
     public static Condition eq(String column, Object value) {
@@ -52,6 +60,7 @@ public final class Conditions {
     }
 
     /** IN list: {@code column IN (?, ?, ...)}. */
+    @SuppressWarnings("varargs")
     public static Condition in(String column, Object... values) {
         return new InCondition(column, values);
     }
@@ -70,6 +79,66 @@ public final class Conditions {
     public static Condition isNotNull(String column) {
         return new IsNullCondition(column, true);
     }
+
+    // ── Type-safe Column&lt;T&gt; overloads ─────────────────────────────
+
+    /** Equal to: {@code column = ?} (type-safe). */
+    public static <T> Condition eq(Column<T> column, T value) {
+        return new SimpleCondition(column.qualifiedName(), "=", value);
+    }
+
+    /** Not equal to: {@code column <> ?} (type-safe). */
+    public static <T> Condition ne(Column<T> column, T value) {
+        return new SimpleCondition(column.qualifiedName(), "<>", value);
+    }
+
+    /** Greater than: {@code column > ?} (type-safe). */
+    public static <T> Condition gt(Column<T> column, T value) {
+        return new SimpleCondition(column.qualifiedName(), ">", value);
+    }
+
+    /** Greater than or equal: {@code column >= ?} (type-safe). */
+    public static <T> Condition gte(Column<T> column, T value) {
+        return new SimpleCondition(column.qualifiedName(), ">=", value);
+    }
+
+    /** Less than: {@code column < ?} (type-safe). */
+    public static <T> Condition lt(Column<T> column, T value) {
+        return new SimpleCondition(column.qualifiedName(), "<", value);
+    }
+
+    /** Less than or equal: {@code column <= ?} (type-safe). */
+    public static <T> Condition lte(Column<T> column, T value) {
+        return new SimpleCondition(column.qualifiedName(), "<=", value);
+    }
+
+    /** LIKE pattern match: {@code column LIKE ?} (type-safe). */
+    public static <T> Condition like(Column<T> column, T value) {
+        return new SimpleCondition(column.qualifiedName(), "LIKE", value);
+    }
+
+    /** IN list: {@code column IN (?, ?, ...)} (type-safe). */
+    @SafeVarargs
+    public static <T> Condition in(Column<T> column, T... values) {
+        return new InCondition(column.qualifiedName(), values);
+    }
+
+    /** BETWEEN range: {@code column BETWEEN ? AND ?} (type-safe). */
+    public static <T> Condition between(Column<T> column, T start, T end) {
+        return new BetweenCondition(column.qualifiedName(), start, end);
+    }
+
+    /** IS NULL check: {@code column IS NULL} (type-safe). */
+    public static <T> Condition isNull(Column<T> column) {
+        return new IsNullCondition(column.qualifiedName(), false);
+    }
+
+    /** IS NOT NULL check: {@code column IS NOT NULL} (type-safe). */
+    public static <T> Condition isNotNull(Column<T> column) {
+        return new IsNullCondition(column.qualifiedName(), true);
+    }
+
+    // ── Compound conditions ──────────────────────────────────────────────
 
     /** Combines multiple conditions with AND. */
     public static Condition and(Condition... conditions) {

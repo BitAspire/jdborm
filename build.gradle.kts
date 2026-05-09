@@ -24,6 +24,13 @@ dependencies {
     testImplementation("org.hsqldb:hsqldb:2.7.2")
 }
 
+tasks.jar {
+    from(rootDir) {
+        include("AGENTS.md", "AI_REFERENCE.md")
+        into("META-INF/jdborm")
+    }
+}
+
 tasks.test {
     useJUnitPlatform()
 }

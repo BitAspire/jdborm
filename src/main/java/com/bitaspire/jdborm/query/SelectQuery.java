@@ -4,12 +4,15 @@ import com.bitaspire.jdborm.JdbORM;
 import com.bitaspire.jdborm.exception.JdbOrmException;
 import com.bitaspire.jdborm.condition.Condition;
 import com.bitaspire.jdborm.mapper.ResultMapper;
+import com.bitaspire.jdborm.schema.Column;
+import com.bitaspire.jdborm.schema.Table;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -17,7 +20,8 @@ import java.util.List;
  * <p>
  * Supports selecting specific columns (or all with {@code *}), FROM clause,
  * WHERE with conditions, ORDER BY (ASC/DESC), LIMIT, OFFSET, and JOINs
- * (INNER, LEFT, RIGHT).
+ * (INNER, LEFT, RIGHT). Both string-based and type-safe ({@link Column},
+ * {@link Table}) overloads are provided.
  * </p>
  */
 public class SelectQuery implements Query {
@@ -44,13 +48,24 @@ public class SelectQuery implements Query {
     }
 
     /**
-     * Sets the table to select from.
+     * Sets the table to select from (string-based).
      *
      * @param table the table name (can include alias, e.g. {@code "users u"})
      * @return this builder for chaining
      */
     public SelectQuery from(String table) {
         this.table = table;
+        return this;
+    }
+
+    /**
+     * Sets the table to select from (type-safe).
+     *
+     * @param table the {@link Table} reference
+     * @return this builder for chaining
+     */
+    public SelectQuery from(Table table) {
+        this.table = table.reference();
         return this;
     }
 
@@ -66,7 +81,7 @@ public class SelectQuery implements Query {
     }
 
     /**
-     * Adds an ORDER BY clause for the given columns in ascending order.
+     * Adds an ORDER BY clause for the given columns in ascending order (string-based).
      *
      * @param columns column names to order by
      * @return this builder for chaining
@@ -80,7 +95,17 @@ public class SelectQuery implements Query {
     }
 
     /**
-     * Adds an ORDER BY clause for the given columns in descending order.
+     * Adds an ORDER BY clause for the given type-safe columns in ascending order.
+     *
+     * @param columns {@link Column} references to order by
+     * @return this builder for chaining
+     */
+    public SelectQuery orderBy(Column<?>... columns) {
+        return orderBy(Arrays.stream(columns).map(Column::qualifiedName).toArray(String[]::new));
+    }
+
+    /**
+     * Adds an ORDER BY clause for the given columns in descending order (string-based).
      *
      * @param columns column names to order by
      * @return this builder for chaining
@@ -88,6 +113,20 @@ public class SelectQuery implements Query {
     public SelectQuery orderByDesc(String... columns) {
         for (String col : columns) {
             this.orderByColumns.add(col);
+            this.orderByDirections.add(false);
+        }
+        return this;
+    }
+
+    /**
+     * Adds an ORDER BY clause for the given type-safe columns in descending order.
+     *
+     * @param columns {@link Column} references to order by
+     * @return this builder for chaining
+     */
+    public SelectQuery orderByDesc(Column<?>... columns) {
+        for (Column<?> col : columns) {
+            this.orderByColumns.add(col.qualifiedName());
             this.orderByDirections.add(false);
         }
         return this;
@@ -116,7 +155,7 @@ public class SelectQuery implements Query {
     }
 
     /**
-     * Adds an INNER JOIN clause.
+     * Adds an INNER JOIN clause (string-based).
      *
      * @param table   the table to join (can include alias)
      * @param onLeft  the left side of the ON condition
@@ -129,7 +168,20 @@ public class SelectQuery implements Query {
     }
 
     /**
-     * Adds a LEFT JOIN clause.
+     * Adds an INNER JOIN clause (type-safe).
+     *
+     * @param table   the {@link Table} to join
+     * @param onLeft  the left side {@link Column} of the ON condition
+     * @param onRight the right side {@link Column} of the ON condition
+     * @return this builder for chaining
+     */
+    public SelectQuery join(Table table, Column<?> onLeft, Column<?> onRight) {
+        joins.add(new JoinClause("INNER JOIN", table.reference(), onLeft.qualifiedName(), onRight.qualifiedName()));
+        return this;
+    }
+
+    /**
+     * Adds a LEFT JOIN clause (string-based).
      *
      * @param table   the table to join (can include alias)
      * @param onLeft  the left side of the ON condition
@@ -142,7 +194,20 @@ public class SelectQuery implements Query {
     }
 
     /**
-     * Adds a RIGHT JOIN clause.
+     * Adds a LEFT JOIN clause (type-safe).
+     *
+     * @param table   the {@link Table} to join
+     * @param onLeft  the left side {@link Column} of the ON condition
+     * @param onRight the right side {@link Column} of the ON condition
+     * @return this builder for chaining
+     */
+    public SelectQuery leftJoin(Table table, Column<?> onLeft, Column<?> onRight) {
+        joins.add(new JoinClause("LEFT JOIN", table.reference(), onLeft.qualifiedName(), onRight.qualifiedName()));
+        return this;
+    }
+
+    /**
+     * Adds a RIGHT JOIN clause (string-based).
      *
      * @param table   the table to join (can include alias)
      * @param onLeft  the left side of the ON condition
@@ -151,6 +216,19 @@ public class SelectQuery implements Query {
      */
     public SelectQuery rightJoin(String table, String onLeft, String onRight) {
         joins.add(new JoinClause("RIGHT JOIN", table, onLeft, onRight));
+        return this;
+    }
+
+    /**
+     * Adds a RIGHT JOIN clause (type-safe).
+     *
+     * @param table   the {@link Table} to join
+     * @param onLeft  the left side {@link Column} of the ON condition
+     * @param onRight the right side {@link Column} of the ON condition
+     * @return this builder for chaining
+     */
+    public SelectQuery rightJoin(Table table, Column<?> onLeft, Column<?> onRight) {
+        joins.add(new JoinClause("RIGHT JOIN", table.reference(), onLeft.qualifiedName(), onRight.qualifiedName()));
         return this;
     }
 

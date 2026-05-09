@@ -2,6 +2,7 @@ package com.bitaspire.jdborm.query;
 
 import com.bitaspire.jdborm.JdbORM;
 import com.bitaspire.jdborm.exception.JdbOrmException;
+import com.bitaspire.jdborm.schema.Column;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -16,8 +17,9 @@ import java.util.Map;
 /**
  * Builder for INSERT queries.
  * <p>
- * Use {@link #set(String, Object)} to add column-value pairs, then
- * {@link #execute()} to run the insert and retrieve auto-generated keys.
+ * Use {@link #set(String, Object)} (string-based) or
+ * {@link #set(Column, Object)} (type-safe) to add column-value pairs,
+ * then {@link #execute()} to run the insert and retrieve auto-generated keys.
  * </p>
  */
 public class InsertQuery implements Query {
@@ -38,7 +40,7 @@ public class InsertQuery implements Query {
     }
 
     /**
-     * Sets a column value for the INSERT.
+     * Sets a column value for the INSERT (string-based).
      *
      * @param column the column name
      * @param value  the value to insert
@@ -46,6 +48,20 @@ public class InsertQuery implements Query {
      */
     public InsertQuery set(String column, Object value) {
         values.put(column, value);
+        return this;
+    }
+
+    /**
+     * Sets a column value for the INSERT (type-safe).
+     * The compiler ensures the value type matches the column type.
+     *
+     * @param column the {@link Column} reference
+     * @param value  the value to insert (must match the column's type)
+     * @param <T>    the column's value type
+     * @return this builder for chaining
+     */
+    public <T> InsertQuery set(Column<T> column, T value) {
+        values.put(column.qualifiedName(), value);
         return this;
     }
 
