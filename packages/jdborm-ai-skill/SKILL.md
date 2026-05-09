@@ -43,6 +43,56 @@ db.select("u.id", "p.title").from("users u")
 
 Compound: `cond1.and(cond2)`, `cond1.or(cond2)`, `and(cond1, cond2, ...)`, `or(cond1, cond2, ...)`
 
+### DDL Schema Management (v0.3.0+)
+
+```java
+// CREATE TABLE
+db.createTable("users")
+    .column("id", "BIGINT AUTO_INCREMENT PRIMARY KEY")
+    .column("name", "VARCHAR(100) NOT NULL")
+    .column("email", "VARCHAR(255) NOT NULL UNIQUE")
+    .primaryKey("id")
+    .foreignKey("org_id", "organizations(id)")
+    .unique("email")
+    .check("age >= 0")
+    .ifNotExists()
+    .execute();
+
+// ALTER TABLE
+db.alterTable("users")
+    .addColumn("age", "INTEGER DEFAULT 0")
+    .modifyColumn("name", "VARCHAR(200)")
+    .renameColumn("email", "email_address")
+    .dropColumn("old_field")
+    .addPrimaryKey("id")
+    .addForeignKey("user_id", "users(id)")
+    .addUnique("order_code")
+    .addCheck("amount > 0")
+    .dropConstraint("old_constraint")
+    .dropPrimaryKey()
+    .execute();
+
+// DROP TABLE
+db.dropTable("users").ifExists().cascade().execute();
+
+// TRUNCATE TABLE
+db.truncateTable("users").execute();
+
+// RENAME TABLE
+db.renameTable("users", "customers").execute();
+
+// CREATE INDEX
+db.createIndex("idx_users_email")
+    .on("users", "email")
+    .unique()
+    .ifNotExists()
+    .using("HASH")
+    .execute();
+
+// DROP INDEX
+db.dropIndex("idx_users_email").on("users").ifExists().cascade().execute();
+```
+
 ### Query interface
 All queries implement `toSql()` and `getParameters()`.
 
@@ -56,8 +106,14 @@ com.bitaspire.jdborm
 ├── condition/Condition.java, Conditions.java
 ├── exception/JdbOrmException.java
 ├── mapper/ResultMapper.java
-├── query/SelectQuery.java, InsertQuery.java, UpdateQuery.java, DeleteQuery.java, JoinClause.java
-└── schema/Column.java
+├── query/
+│   ├── SelectQuery.java, InsertQuery.java, UpdateQuery.java, DeleteQuery.java
+│   ├── CreateTableQuery.java, AlterTableQuery.java, DropTableQuery.java
+│   ├── TruncateQuery.java, RenameTableQuery.java
+│   ├── CreateIndexQuery.java, DropIndexQuery.java
+│   └── JoinClause.java
+├── schema/Column.java, Table.java
+└── META-INF/jdborm/AGENTS.md, AI_REFERENCE.md
 ```
 
 For full details, see AGENTS.md and AI_REFERENCE.md shipped with the library in `META-INF/jdborm/`.
