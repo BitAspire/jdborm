@@ -20,7 +20,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.BitAspire:jdborm:0.3.1")
+    implementation("com.github.BitAspire:jdborm:0.4.0")
 }
 ```
 
@@ -37,7 +37,7 @@ dependencies {
 <dependency>
     <groupId>com.github.BitAspire</groupId>
     <artifactId>jdborm</artifactId>
-    <version>0.3.1</version>
+    <version>0.4.0</version>
 </dependency>
 ```
 
@@ -150,11 +150,19 @@ List<Post> posts = db.select("u.id", "p.title")
 |---------|-------------|---------|
 | `JdbORM` | `.execute(sql, params)`, `.query(sql, mapper, params)`, `.inTransaction(callback)` | `int`, `List<T>`, `T` |
 | `SelectQuery` | `.from()`, `.where()`, `.join()`, `.orderBy()`, `.limit()`, `.offset()` | `List<T>` / `execute(Class)`, `execute(RowMapper)`, `executeScalar(Class)` |
-| `InsertQuery` | `.set()`, `.setRaw()`, `.onConflictDoNothing()`, `.onConflictDoUpdate()`, `.addBatch()` | `GeneratedKeys`, `int[]` |
+| `InsertQuery` | `.set()`, `.setRaw()`, `.onConflict()`, `.onConflictOnConstraint()`, `.doNothing()`, `.doUpdateSet()`, `.onConflictDoNothing()`, `.onConflictDoUpdate()`, `.addBatch()` | `GeneratedKeys`, `int[]` |
 | `UpdateQuery` | `.set()`, `.setRaw()`, `.where()` | `int` (affected rows) |
 | `DeleteQuery` | `.where()` | `int` (affected rows) |
 
 All builders support `.toSql()` and `.getParameters()` for debugging.
+
+## Features added in v0.4.0
+
+- ON CONFLICT target API: `.onConflict(columns)` + `.doNothing()` / `.doUpdateSet(clauses)`
+- ON CONFLICT ON CONSTRAINT: `.onConflictOnConstraint(name)` for named constraints
+- Static helpers: `InsertQuery.excluded(col)` and `InsertQuery.setClause(col, expr)`
+- Unified batch columns: batch rows with different column sets now produce correct SQL
+- Deprecated old methods: `.onConflictDoNothing()` → `.onConflict().doNothing()`, `.onConflictDoUpdate()` → `.onConflict().doUpdateSet()`
 
 ## Features added in v0.3.1
 
