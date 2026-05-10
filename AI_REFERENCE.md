@@ -42,7 +42,20 @@ JdbORM.connect(String url, String user, String pass) → JdbORM
 
 ```
 .set(String column, Object value) → InsertQuery
-.execute()                        → List<Long>  // generated keys
+.setRaw(String column, String expression) → InsertQuery // e.g. "NOW()"
+.onConflict(String... columns) → InsertQuery // @since 0.4.0
+.onConflictOnConstraint(String name) → InsertQuery // @since 0.4.0
+.doNothing() → InsertQuery // @since 0.4.0, requires onConflict() first
+.doUpdateSet(String... clauses) → InsertQuery // @since 0.4.0, requires onConflict() first
+.onConflictDoNothing() → InsertQuery // @deprecated
+.onConflictDoUpdate(String... clauses) → InsertQuery // @deprecated use onConflict().doUpdateSet()
+.addBatch() → InsertQuery // add current values as batch row
+.execute() → GeneratedKeys
+.executeBatch() → int[] // execute accumulated batch rows
+
+// Static helpers (@since 0.4.0)
+InsertQuery.excluded(String column) → String // → "col = EXCLUDED.col"
+InsertQuery.setClause(String col, String expr) → String // → "col = expr"
 ```
 
 ### UpdateQuery

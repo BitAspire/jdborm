@@ -105,11 +105,22 @@ com.bitaspire.jdborm
 |--------|---------|-------------|
 | `.set(String col, Object val)` | `InsertQuery` | Set column value |
 | `.setRaw(String col, String expr)` | `InsertQuery` | Set raw SQL expression (e.g. "NOW()") |
+| `.onConflict(String... columns)` | `InsertQuery` | Set UPSERT conflict target columns |
+| `.onConflictOnConstraint(String name)` | `InsertQuery` | Set UPSERT conflict target by constraint name |
+| `.doNothing()` | `InsertQuery` | Complete UPSERT with ON CONFLICT ... DO NOTHING |
+| `.doUpdateSet(String... clauses)` | `InsertQuery` | Complete UPSERT with ON CONFLICT ... DO UPDATE SET ... |
 | `.onConflictDoNothing()` | `InsertQuery` | Add ON CONFLICT DO NOTHING |
 | `.onConflictDoUpdate(String... clauses)` | `InsertQuery` | Add ON CONFLICT DO UPDATE SET ... |
 | `.addBatch()` | `InsertQuery` | Save current values as batch row |
 | `.execute()` | `GeneratedKeys` | Execute; returns generated keys |
 | `.executeBatch()` | `int[]` | Execute accumulated batch rows |
+
+**InsertQuery static helpers (@since 0.4.0)**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `InsertQuery.excluded(String col)` | `String` | Returns `"col = EXCLUDED.col"` |
+| `InsertQuery.setClause(String col, String expr)` | `String` | Returns `"col = expr"` |
 
 ### UpdateQuery
 
