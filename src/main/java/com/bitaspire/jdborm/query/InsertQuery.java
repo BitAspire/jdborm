@@ -11,6 +11,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -29,6 +30,8 @@ public class InsertQuery implements Query {
     private final String table;
     private final Map<String, Object> values = new LinkedHashMap<>();
     private String onConflictAction;
+    private String[] conflictColumns;
+    private String conflictConstraint;
     private final List<Map<String, Object>> batchRows = new ArrayList<>();
     private boolean inBatch;
 
@@ -106,7 +109,10 @@ public class InsertQuery implements Query {
      * </p>
      *
      * @return this builder for chaining
+     * @deprecated Use {@link #onConflict(String...)} followed by {@link #doNothing()}
+     *             or {@link #onConflictOnConstraint(String)} followed by {@link #doNothing()} instead.
      */
+    @Deprecated
     public InsertQuery onConflictDoNothing() {
         this.onConflictAction = "DO NOTHING";
         return this;
@@ -122,7 +128,10 @@ public class InsertQuery implements Query {
      * @param setClauses one or more SET clause strings (at least one required)
      * @return this builder for chaining
      * @throws JdbOrmException if no set clauses are provided
+     * @deprecated Use {@link #onConflict(String...)} followed by {@link #doUpdateSet(String...)}
+     *             or {@link #onConflictOnConstraint(String)} followed by {@link #doUpdateSet(String...)} instead.
      */
+    @Deprecated
     public InsertQuery onConflictDoUpdate(String... setClauses) {
         if (setClauses.length == 0) {
             throw new JdbOrmException("At least one SET clause required for ON CONFLICT DO UPDATE");
@@ -134,6 +143,106 @@ public class InsertQuery implements Query {
         }
         this.onConflictAction = sb.toString();
         return this;
+    }
+
+    /**
+     * Sets the conflict target columns for an {@code ON CONFLICT} clause.
+     * <p>
+     * Must be followed by {@link #doNothing()} or {@link #doUpdateSet(String...)}.
+     * </p>
+     *
+     * @param columns the conflict target column names (e.g. {@code "unique_id"})
+     * @return this builder for chaining
+     */
+    public InsertQuery onConflict(String... columns) {
+        this.conflictColumns = columns;
+        this.conflictConstraint = null;
+        return this;
+    }
+
+    /**
+     * Sets the conflict target constraint name for an {@code ON CONFLICT ON CONSTRAINT} clause.
+     * <p>
+     * Must be followed by {@link #doNothing()} or {@link #doUpdateSet(String...)}.
+     * </p>
+     *
+     * @param constraintName the constraint name (e.g. {@code "pk_visitors"})
+     * @return this builder for chaining
+     */
+    public InsertQuery onConflictOnConstraint(String constraintName) {
+        this.conflictConstraint = constraintName;
+        this.conflictColumns = null;
+        return this;
+    }
+
+    /**
+     * Completes the {@code ON CONFLICT} clause with {@code DO NOTHING}.
+     * <p>
+     * Must be called after {@link #onConflict(String...)} or
+     * {@link #onConflictOnConstraint(String)}.
+     * </p>
+     *
+     * @return this builder for chaining
+     * @throws JdbOrmException if no conflict target was set before this call
+     */
+    public InsertQuery doNothing() {
+        if (conflictColumns == null && conflictConstraint == null) {
+            throw new JdbOrmException("onConflict(columns) or onConflictOnConstraint(name) must be called before doNothing()");
+        }
+        this.onConflictAction = "DO NOTHING";
+        return this;
+    }
+
+    /**
+     * Completes the {@code ON CONFLICT} clause with {@code DO UPDATE SET ...}.
+     * <p>
+     * Must be called after {@link #onConflict(String...)} or
+     * {@link #onConflictOnConstraint(String)}.
+     * </p>
+     *
+     * @param setClauses SET clause strings (e.g. {@code "name = EXCLUDED.name"})
+     * @return this builder for chaining
+     * @throws JdbOrmException if no set clauses are provided
+     * @throws JdbOrmException if no conflict target was set before this call
+     */
+    public InsertQuery doUpdateSet(String... setClauses) {
+        if (setClauses.length == 0) {
+            throw new JdbOrmException("At least one SET clause required for ON CONFLICT DO UPDATE");
+        }
+        if (conflictColumns == null && conflictConstraint == null) {
+            throw new JdbOrmException("onConflict(columns) or onConflictOnConstraint(name) must be called before doUpdateSet()");
+        }
+        StringBuilder sb = new StringBuilder("DO UPDATE SET ");
+        for (int i = 0; i < setClauses.length; i++) {
+            if (i > 0) sb.append(", ");
+            sb.append(setClauses[i]);
+        }
+        this.onConflictAction = sb.toString();
+        return this;
+    }
+
+    /**
+     * Returns a SET clause using the PostgreSQL {@code EXCLUDED} pseudo-table.
+     * <p>
+     * Shortcut for {@code setClause(column, "EXCLUDED." + column)}.
+     * </p>
+     *
+     * @param column the column name
+     * @return a SET clause string like {@code "last_known_name = EXCLUDED.last_known_name"}
+     */
+    public static String excluded(String column) {
+        return column + " = EXCLUDED." + column;
+    }
+
+    /**
+     * Returns a SET clause string for use with {@link #doUpdateSet(String...)}.
+     *
+     * @param column     the column name
+     * @param expression the expression to set (e.g. {@code "EXCLUDED.name"})
+     * @return a SET clause string like {@code "first_seen = LEAST(visitors.first_seen, EXCLUDED.first_seen)"}
+     */
+    public static String setClause(String column, String expression) {
+        return column + " = " + expression;
     }
 
     /**
@@ -157,17 +266,28 @@ public class InsertQuery implements Query {
         return this;
     }
 
+    private List<String> unifiedColumns() {
+        if (batchRows.isEmpty()) {
+            return new ArrayList<>(values.keySet());
+        }
+        LinkedHashSet<String> seen = new LinkedHashSet<>();
+        for (Map<String, Object> row : batchRows) {
+            seen.addAll(row.keySet());
+        }
+        seen.addAll(values.keySet());
+        return new ArrayList<>(seen);
+    }
+
     @Override
     public String toSql() {
-        Map<String, Object> cols = !batchRows.isEmpty() ? batchRows.get(0) : values;
-        if (cols.isEmpty()) {
+        List<String> columns = unifiedColumns();
+        if (columns.isEmpty()) {
             throw new JdbOrmException("No values specified for INSERT");
         }
 
         StringBuilder sql = new StringBuilder();
         sql.append("INSERT INTO ").append(table).append(" (");
 
-        List<String> columns = new ArrayList<>(cols.keySet());
         for (int i = 0; i < columns.size(); i++) {
             if (i > 0) sql.append(", ");
             sql.append(columns.get(i));
@@ -179,10 +299,10 @@ public class InsertQuery implements Query {
             if (r > 0) sql.append(", ");
             sql.append("(");
             Map<String, Object> row = !batchRows.isEmpty() ? batchRows.get(r) : values;
-            List<String> rowCols = new ArrayList<>(row.keySet());
-            for (int i = 0; i < rowCols.size(); i++) {
+            for (int i = 0; i < columns.size(); i++) {
                 if (i > 0) sql.append(", ");
-                Object val = row.get(rowCols.get(i));
+                String colName = columns.get(i);
+                Object val = row.get(colName);
                 if (val instanceof RawExpression expr) {
                     sql.append(expr.expression());
                 } else {
@@ -193,7 +313,18 @@ public class InsertQuery implements Query {
         }
 
         if (onConflictAction != null) {
-            sql.append(" ON CONFLICT ").append(onConflictAction);
+            sql.append(" ON CONFLICT");
+            if (conflictConstraint != null) {
+                sql.append(" ON CONSTRAINT ").append(conflictConstraint);
+            } else if (conflictColumns != null && conflictColumns.length > 0) {
+                sql.append(" (");
+                for (int i = 0; i < conflictColumns.length; i++) {
+                    if (i > 0) sql.append(", ");
+                    sql.append(conflictColumns[i]);
+                }
+                sql.append(")");
+            }
+            sql.append(" ").append(onConflictAction);
         }
 
         return sql.toString();
@@ -202,9 +333,11 @@ public class InsertQuery implements Query {
     @Override
     public List<Object> getParameters() {
         List<Object> params = new ArrayList<>();
+        List<String> columns = unifiedColumns();
         List<Map<String, Object>> rows = !batchRows.isEmpty() ? batchRows : List.of(values);
         for (Map<String, Object> row : rows) {
-            for (Object val : row.values()) {
+            for (String colName : columns) {
+                Object val = row.get(colName);
                 if (!(val instanceof RawExpression)) {
                     params.add(val);
                 }
@@ -288,11 +421,13 @@ public class InsertQuery implements Query {
 
     private int[] executeBatchWithConnection(Connection conn) {
         String sql = toSql();
+        List<String> columns = unifiedColumns();
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             for (Map<String, Object> row : batchRows) {
                 int idx = 1;
-                for (Object val : row.values()) {
-                    if (!(val instanceof RawExpression)) {
+                for (String colName : columns) {
+                    Object val = row.get(colName);
+                    if (val != null && !(val instanceof RawExpression)) {
                         stmt.setObject(idx++, val);
                     }
                 }
