@@ -12,10 +12,12 @@ import com.bitaspire.jdborm.query.RenameTableQuery;
 import com.bitaspire.jdborm.query.SelectQuery;
 import com.bitaspire.jdborm.query.TruncateQuery;
 import com.bitaspire.jdborm.query.UpdateQuery;
+import com.bitaspire.jdborm.exception.JdbOrmException;
 import com.bitaspire.jdborm.schema.Column;
 import com.bitaspire.jdborm.schema.Table;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
 import java.util.List;
 
 import static com.bitaspire.jdborm.condition.Conditions.*;
@@ -481,6 +483,84 @@ class SqlGenerationTest {
         assertEquals(List.of("John"), q.getParameters());
     }
 
+    @Test
+    void insertOnConflictTargetDoNothing() {
+        InsertQuery q = new InsertQuery(null, "users");
+        q.set("name", "John").onConflict("id").doNothing();
+        assertEquals("INSERT INTO users (name) VALUES (?) ON CONFLICT (id) DO NOTHING", q.toSql());
+        assertEquals(List.of("John"), q.getParameters());
+    }
+
+    @Test
+    void insertOnConflictTargetDoUpdate() {
+        InsertQuery q = new InsertQuery(null, "users");
+        q.set("name", "John").set("email", "john@example.com")
+                .onConflict("unique_id")
+                .doUpdateSet("name = EXCLUDED.name", "email = EXCLUDED.email");
+        assertEquals("INSERT INTO users (name, email) VALUES (?, ?) ON CONFLICT (unique_id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email", q.toSql());
+        assertEquals(List.of("John", "john@example.com"), q.getParameters());
+    }
+
+    @Test
+    void insertOnConflictCompositeTarget() {
+        InsertQuery q = new InsertQuery(null, "visitors");
+        q.set("house_uuid", "h1").set("visitor_uuid", "v1").set("visit_count", 1)
+                .onConflict("house_uuid", "visitor_uuid")
+                .doUpdateSet("visit_count = EXCLUDED.visit_count");
+        assertEquals("INSERT INTO visitors (house_uuid, visitor_uuid, visit_count) VALUES (?, ?, ?) ON CONFLICT (house_uuid, visitor_uuid) DO UPDATE SET visit_count = EXCLUDED.visit_count", q.toSql());
+        assertEquals(List.of("h1", "v1", 1), q.getParameters());
+    }
+
+    @Test
+    void insertOnConflictOnConstraintDoNothing() {
+        InsertQuery q = new InsertQuery(null, "users");
+        q.set("name", "John").onConflictOnConstraint("pk_users").doNothing();
+        assertEquals("INSERT INTO users (name) VALUES (?) ON CONFLICT ON CONSTRAINT pk_users DO NOTHING", q.toSql());
+        assertEquals(List.of("John"), q.getParameters());
+    }
+
+    @Test
+    void insertOnConflictOnConstraintDoUpdate() {
+        InsertQuery q = new InsertQuery(null, "users");
+        q.set("name", "John").onConflictOnConstraint("pk_users")
+                .doUpdateSet("name = EXCLUDED.name");
+        assertEquals("INSERT INTO users (name) VALUES (?) ON CONFLICT ON CONSTRAINT pk_users DO UPDATE SET name = EXCLUDED.name", q.toSql());
+        assertEquals(List.of("John"), q.getParameters());
+    }
+
+    @Test
+    void insertDoNothingThrowsWithoutTarget() {
+        InsertQuery q = new InsertQuery(null, "users");
+        q.set("name", "John");
+        assertThrows(JdbOrmException.class, () -> q.doNothing());
+    }
+
+    @Test
+    void insertDoUpdateSetThrowsWithoutTarget() {
+        InsertQuery q = new InsertQuery(null, "users");
+        q.set("name", "John");
+        assertThrows(JdbOrmException.class, () -> q.doUpdateSet("name = EXCLUDED.name"));
+    }
+
+    @Test
+    void insertDoUpdateSetThrowsWithEmptyClauses() {
+        InsertQuery q = new InsertQuery(null, "users");
+        q.set("name", "John").onConflict("id");
+        assertThrows(JdbOrmException.class, () -> q.doUpdateSet());
+    }
+
+    @Test
+    void insertExcludedHelper() {
+        assertEquals("last_known_name = EXCLUDED.last_known_name", InsertQuery.excluded("last_known_name"));
+        assertEquals("visit_count = EXCLUDED.visit_count", InsertQuery.excluded("visit_count"));
+    }
+
+    @Test
+    void insertSetClauseHelper() {
+        assertEquals("first_seen = LEAST(visitors.first_seen, EXCLUDED.first_seen)",
+                InsertQuery.setClause("first_seen", "LEAST(visitors.first_seen, EXCLUDED.first_seen)"));
+    }
+
     // ── Batch INSERT tests ────────────────────────────────────────────────
 
     @Test
@@ -508,6 +588,35 @@ class SqlGenerationTest {
         q.set("name", "Bob").addBatch();
         q.onConflictDoNothing();
         assertEquals("INSERT INTO users (name) VALUES (?), (?) ON CONFLICT DO NOTHING", q.toSql());
+        assertEquals(List.of("Alice", "Bob"), q.getParameters());
+    }
+
+    @Test
+    void insertBatchNullableColumns() {
+        InsertQuery q = new InsertQuery(null, "houses");
+        q.set("name", "House A").set("spawn_x", 10.5).addBatch();
+        q.set("name", "House B").addBatch();
+        q.set("name", "House C").set("spawn_x", 20.0).addBatch();
+        assertEquals("INSERT INTO houses (name, spawn_x) VALUES (?, ?), (?, ?), (?, ?)", q.toSql());
+        assertEquals(Arrays.asList("House A", 10.5, "House B", null, "House C", 20.0), q.getParameters());
+    }
+
+    @Test
+    void insertBatchExplicitNull() {
+        InsertQuery q = new InsertQuery(null, "users");
+        q.set("name", "Alice").set("email", null).addBatch();
+        q.set("name", "Bob").set("email", "bob@example.com").addBatch();
+        assertEquals("INSERT INTO users (name, email) VALUES (?, ?), (?, ?)", q.toSql());
+        assertEquals(Arrays.asList("Alice", null, "Bob", "bob@example.com"), q.getParameters());
+    }
+
+    @Test
+    void insertBatchWithOnConflictTargetDoNothing() {
+        InsertQuery q = new InsertQuery(null, "users");
+        q.set("name", "Alice").addBatch();
+        q.set("name", "Bob").addBatch();
+        q.onConflict("name").doNothing();
+        assertEquals("INSERT INTO users (name) VALUES (?), (?) ON CONFLICT (name) DO NOTHING", q.toSql());
         assertEquals(List.of("Alice", "Bob"), q.getParameters());
     }
 
