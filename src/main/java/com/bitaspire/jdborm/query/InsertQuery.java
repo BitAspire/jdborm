@@ -420,15 +420,53 @@ public class InsertQuery implements Query {
     }
 
     private int[] executeBatchWithConnection(Connection conn) {
-        String sql = toSql();
+        List<Map<String, Object>> savedBatch = new ArrayList<>(batchRows);
         List<String> columns = unifiedColumns();
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-            for (Map<String, Object> row : batchRows) {
+
+        // Build a single-row INSERT SQL so that addBatch() can be used per row.
+        StringBuilder sql = new StringBuilder("INSERT INTO ").append(table).append(" (");
+        for (int i = 0; i < columns.size(); i++) {
+            if (i > 0) sql.append(", ");
+            sql.append(columns.get(i));
+        }
+        sql.append(") VALUES (");
+        Map<String, Object> firstRow = savedBatch.get(0);
+        for (int i = 0; i < columns.size(); i++) {
+            if (i > 0) sql.append(", ");
+            Object val = firstRow.get(columns.get(i));
+            if (val instanceof RawExpression expr) {
+                sql.append(expr.expression());
+            } else {
+                sql.append("?");
+            }
+        }
+        sql.append(")");
+        if (onConflictAction != null) {
+            sql.append(" ON CONFLICT");
+            if (conflictConstraint != null) {
+                sql.append(" ON CONSTRAINT ").append(conflictConstraint);
+            } else if (conflictColumns != null && conflictColumns.length > 0) {
+                sql.append(" (");
+                for (int i = 0; i < conflictColumns.length; i++) {
+                    if (i > 0) sql.append(", ");
+                    sql.append(conflictColumns[i]);
+                }
+                sql.append(")");
+            }
+            sql.append(" ").append(onConflictAction);
+        }
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql.toString())) {
+            for (Map<String, Object> row : savedBatch) {
                 int idx = 1;
                 for (String colName : columns) {
                     Object val = row.get(colName);
-                    if (val != null && !(val instanceof RawExpression)) {
-                        stmt.setObject(idx++, val);
+                    if (!(val instanceof RawExpression)) {
+                        if (val != null) {
+                            stmt.setObject(idx++, val);
+                        } else {
+                            stmt.setNull(idx++, java.sql.Types.NULL);
+                        }
                     }
                 }
                 stmt.addBatch();

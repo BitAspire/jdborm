@@ -20,7 +20,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.BitAspire:jdborm:0.4.0")
+    implementation("com.github.BitAspire:jdborm:0.4.1")
 }
 ```
 
@@ -37,7 +37,7 @@ dependencies {
 <dependency>
     <groupId>com.github.BitAspire</groupId>
     <artifactId>jdborm</artifactId>
-    <version>0.4.0</version>
+    <version>0.4.1</version>
 </dependency>
 ```
 
@@ -155,6 +155,12 @@ List<Post> posts = db.select("u.id", "p.title")
 | `DeleteQuery` | `.where()` | `int` (affected rows) |
 
 All builders support `.toSql()` and `.getParameters()` for debugging.
+
+## Features added in v0.4.1
+
+- Fix `InsertQuery.executeBatch()` to correctly bind `null` parameter values via `PreparedStatement.setNull()`
+- Fix `InsertQuery.executeBatch()` to use single-row INSERT SQL with `addBatch()`, preventing "parameter not set" errors on JDBC batch execution
+- Add integration test for batch insert with nullable columns
 
 ## Features added in v0.4.0
 
