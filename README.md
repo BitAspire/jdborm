@@ -101,6 +101,62 @@ List<User> users = db.query("SELECT * FROM users WHERE id = ?",
     (rs, i) -> new User(rs.getLong("id"), rs.getString("name")), 1);
 ```
 
+## Declarative schema push
+
+Define tables, columns, constraints, and indexes in one Java schema object and push it to the database:
+
+```java
+import com.bitaspire.jdborm.schema.Schema;
+
+Schema schema = Schema.create()
+    .table("users", table -> table
+        .column("id", "UUID", col -> col.defaultPostgresUuid().primaryKey())
+        .column("email", "VARCHAR(255)", col -> col.notNull().unique())
+        .column("created_at", "TIMESTAMP", col -> col.defaultExpression("CURRENT_TIMESTAMP"))
+        .index("idx_users_email", idx -> idx.on("email").unique()))
+    .table("posts", table -> table
+        .column("id", "INTEGER", col -> col.generatedByDefaultAsIdentity().primaryKey())
+        .column("user_id", "INTEGER", col -> col.notNull())
+        .column("title", "VARCHAR(200)", col -> col.notNull())
+        .foreignKey("user_id", "users(id)")
+        .index("idx_posts_user_id", "user_id"));
+
+var result = db.pushSchema(schema);
+System.out.println(result.executedSql());
+```
+
+`pushSchema()` is additive: it creates missing tables, adds missing columns, and creates missing indexes. It does not drop tables/columns/indexes or rewrite existing column definitions.
+
+Use `schema.toSql()` to preview idempotent `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS` statements without executing them.
+
+### UUID helpers
+
+For database-generated random UUIDs, use schema default helpers:
+
+```java
+import com.bitaspire.jdborm.schema.UuidDialect;
+
+Schema schema = Schema.create()
+    .table("users", table -> table
+        // PostgreSQL: requires pgcrypto extension for gen_random_uuid()
+        .column("id", "UUID", col -> col.defaultPostgresUuid().primaryKey())
+        // MySQL/HSQLDB-style UUID() default
+        .column("external_id", "CHAR(36)", col -> col.defaultUuid(UuidDialect.MYSQL)));
+```
+
+For application-generated UUIDs, JdbORM includes zero-dependency helpers:
+
+```java
+import com.bitaspire.jdborm.schema.Uuids;
+
+UUID randomId = Uuids.v4();
+UUID orderedId = Uuids.v7(); // RFC 9562 time-ordered UUID
+
+db.insert("users").set("id", orderedId).set("email", "a@example.com").execute();
+```
+
+UUIDv7 is the newest standardized time-ordered UUID format in RFC 9562. UUIDv10 is not currently a standard UUID version.
+
 ## Conditions API
 
 | Method | SQL output | Example |

@@ -16,17 +16,26 @@ import com.bitaspire.jdborm.query.TransactionCallback;
 import com.bitaspire.jdborm.query.TruncateQuery;
 import com.bitaspire.jdborm.query.UpdateQuery;
 import com.bitaspire.jdborm.schema.Column;
+import com.bitaspire.jdborm.schema.ColumnDefinition;
+import com.bitaspire.jdborm.schema.IndexDefinition;
+import com.bitaspire.jdborm.schema.Schema;
+import com.bitaspire.jdborm.schema.SchemaPushResult;
 import com.bitaspire.jdborm.schema.Table;
+import com.bitaspire.jdborm.schema.TableDefinition;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 
 /**
  * Entry point for the JdbORM fluent query builder API.
@@ -303,6 +312,146 @@ public class JdbORM {
      */
     public DropIndexQuery dropIndex(String indexName) {
         return new DropIndexQuery(this, indexName);
+    }
+
+    /**
+     * Pushes a declarative schema to the connected database.
+     * <p>
+     * The push is additive and metadata-driven: missing tables are created,
+     * missing columns are added with {@code ALTER TABLE}, and missing indexes
+     * are created. Existing tables, columns, indexes, and data are left intact;
+     * existing column definitions are not modified and objects are never dropped.
+     * </p>
+     *
+     * @param schema the declarative schema to push
+     * @return details about SQL statements executed during the push
+     * @throws JdbOrmException if metadata inspection or SQL execution fails
+     * @throws NullPointerException if {@code schema} is {@code null}
+     */
+    public SchemaPushResult pushSchema(Schema schema) {
+        Objects.requireNonNull(schema, "schema");
+        Connection conn = getConnection();
+        List<String> executedSql = new ArrayList<>();
+        try {
+            DatabaseMetaData metaData = conn.getMetaData();
+            String catalog = conn.getCatalog();
+
+            for (TableDefinition table : schema.tables()) {
+                if (!tableExists(metaData, catalog, table.name())) {
+                    String sql = table.toSql(false);
+                    executeSchemaStatement(conn, sql);
+                    executedSql.add(sql);
+                } else {
+                    for (ColumnDefinition column : table.columns()) {
+                        if (!columnExists(metaData, catalog, table.name(), column.name())) {
+                            String sql = "ALTER TABLE " + table.name() + " ADD COLUMN " + column.toSql();
+                            executeSchemaStatement(conn, sql);
+                            executedSql.add(sql);
+                        }
+                    }
+                }
+
+                for (IndexDefinition index : table.indexes()) {
+                    if (!indexExists(metaData, catalog, table.name(), index.name())) {
+                        String sql = index.toSql(false);
+                        executeSchemaStatement(conn, sql);
+                        executedSql.add(sql);
+                    }
+                }
+            }
+
+            return new SchemaPushResult(executedSql);
+        } catch (SQLException e) {
+            throw new JdbOrmException("Failed to push schema", e);
+        } finally {
+            if (useDataSource && conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException ignored) {
+                }
+            }
+        }
+    }
+
+    private void executeSchemaStatement(Connection conn, String sql) throws SQLException {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.executeUpdate(sql);
+        }
+    }
+
+    private boolean tableExists(DatabaseMetaData metaData, String catalog, String tableName) throws SQLException {
+        for (String candidate : identifierCandidates(tableName)) {
+            try (ResultSet rs = metaData.getTables(catalog, null, candidate, new String[]{"TABLE"})) {
+                if (rs.next()) {
+                    return true;
+                }
+            }
+        }
+
+        try (ResultSet rs = metaData.getTables(catalog, null, "%", new String[]{"TABLE"})) {
+            while (rs.next()) {
+                if (equalsIdentifier(tableName, rs.getString("TABLE_NAME"))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean columnExists(DatabaseMetaData metaData, String catalog, String tableName, String columnName) throws SQLException {
+        for (String tableCandidate : identifierCandidates(tableName)) {
+            for (String columnCandidate : identifierCandidates(columnName)) {
+                try (ResultSet rs = metaData.getColumns(catalog, null, tableCandidate, columnCandidate)) {
+                    if (rs.next()) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        for (String tableCandidate : identifierCandidates(tableName)) {
+            try (ResultSet rs = metaData.getColumns(catalog, null, tableCandidate, "%")) {
+                while (rs.next()) {
+                    if (equalsIdentifier(columnName, rs.getString("COLUMN_NAME"))) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean indexExists(DatabaseMetaData metaData, String catalog, String tableName, String indexName) throws SQLException {
+        for (String tableCandidate : identifierCandidates(tableName)) {
+            try (ResultSet rs = metaData.getIndexInfo(catalog, null, tableCandidate, false, false)) {
+                while (rs.next()) {
+                    String existingName = rs.getString("INDEX_NAME");
+                    if (existingName != null && equalsIdentifier(indexName, existingName)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private List<String> identifierCandidates(String identifier) {
+        String trimmed = identifier.trim();
+        String upper = trimmed.toUpperCase(Locale.ROOT);
+        String lower = trimmed.toLowerCase(Locale.ROOT);
+        List<String> candidates = new ArrayList<>();
+        candidates.add(trimmed);
+        if (!candidates.contains(upper)) {
+            candidates.add(upper);
+        }
+        if (!candidates.contains(lower)) {
+            candidates.add(lower);
+        }
+        return candidates;
+    }
+
+    private boolean equalsIdentifier(String expected, String actual) {
+        return expected != null && actual != null && expected.equalsIgnoreCase(actual);
     }
 
     /**
