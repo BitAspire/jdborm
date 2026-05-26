@@ -202,8 +202,6 @@ db.insert("users")
     .execute();
 ```
 
-UUIDv7 is the newest standardized time-ordered UUID format in RFC 9562. UUIDv10 is not currently a standard UUID version.
-
 ## Query examples
 
 ### Conditions
