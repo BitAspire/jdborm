@@ -4,14 +4,51 @@
 [![Java 17+](https://img.shields.io/badge/Java-17%2B-blue.svg)](https://openjdk.org/projects/jdk/17/)
 [![](https://jitpack.io/v/BitAspire/jdborm.svg)](https://jitpack.io/#BitAspire/jdborm)
 
-A lightweight, zero-dependency Java library inspired by [Drizzle ORM](https://orm.drizzle.team).  
-Write type-safe SQL queries using fluent method chaining instead of raw string concatenation.
+**jdborm** is a lightweight, zero-dependency Java 17+ library inspired by [Drizzle ORM](https://orm.drizzle.team).
+It gives you a fluent JDBC API for queries, DDL, transactions, and declarative schema push — without annotation processors, runtime magic, or heavyweight ORM state.
 
-## Quick Start
+```java
+import static com.bitaspire.jdborm.condition.Conditions.*;
 
-### 1. Add dependency
+JdbORM db = JdbORM.create(dataSource);
 
-**Gradle:**
+List<User> users = db.select("id", "name", "email")
+    .from("users")
+    .where(eq("active", true).and(gte("age", 18)))
+    .orderBy("name")
+    .limit(20)
+    .execute(User.class);
+```
+
+## AI assistant skill
+
+jdborm ships an AI skill so coding assistants can learn the API in your project:
+
+```bash
+npx jdborm-ai-skill
+```
+
+This installs `.agents/skills/jdborm/SKILL.md` with examples and API notes.
+
+## Why jdborm?
+
+- **Zero runtime dependencies** — just Java 17+ and JDBC.
+- **Fluent SQL builders** — SELECT, INSERT, UPDATE, DELETE, joins, ordering, limits, and raw SQL escape hatches.
+- **Parameterized conditions** — safer SQL generation with ordered `?` parameters.
+- **Custom or reflection mapping** — map rows with `RowMapper<T>` or simple POJO field matching.
+- **DDL helpers** — create/alter/drop tables and indexes with a fluent API.
+- **Declarative schema push** — define tables in Java and push missing tables, columns, and indexes to the database.
+- **UUID helpers** — database UUID defaults plus Java-side UUIDv4/UUIDv7 generation.
+
+## Requirements
+
+- Java 17+
+- JDBC driver for your database
+- No external runtime dependencies from jdborm itself
+
+## Installation
+
+### Gradle
 
 ```kotlin
 repositories {
@@ -20,11 +57,11 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.BitAspire:jdborm:0.4.1")
+    implementation("com.github.BitAspire:jdborm:0.5.0")
 }
 ```
 
-**Maven:**
+### Maven
 
 ```xml
 <repositories>
@@ -37,182 +74,286 @@ dependencies {
 <dependency>
     <groupId>com.github.BitAspire</groupId>
     <artifactId>jdborm</artifactId>
-    <version>0.4.1</version>
+    <version>0.5.0</version>
 </dependency>
 ```
 
-### 2. Use it
+## Quick start
 
 ```java
+import com.bitaspire.jdborm.JdbORM;
+
+import java.util.List;
+
 import static com.bitaspire.jdborm.condition.Conditions.*;
 
 JdbORM db = JdbORM.create(dataSource);
 
-// SELECT with conditions and ordering
-List<User> users = db.select("id", "name", "email")
+List<User> activeUsers = db.select("id", "name", "email")
     .from("users")
-    .where(eq("age", 18).and(gt("score", 100)))
+    .where(eq("active", true))
     .orderBy("name")
-    .limit(10)
     .execute(User.class);
 
-// Custom RowMapper (no reflection)
-List<User> users = db.select("*").from("users")
-    .execute((rs, i) -> new User(rs.getLong("id"), rs.getString("name")));
-
-// Scalar result (e.g. count)
-Long count = db.select("count(*)").from("users").executeScalar(Long.class);
-
-// INSERT with raw expression + ON CONFLICT
 var keys = db.insert("users")
-    .set("name", "John")
-    .setRaw("created_at", "NOW())
-    .onConflictDoNothing()
+    .set("name", "Alice")
+    .set("email", "alice@example.com")
     .execute();
 
-// Batch INSERT
-InsertQuery ins = db.insert("users");
-ins.set("name", "Alice").addBatch();
-ins.set("name", "Bob").addBatch();
-ins.executeBatch();
-
-// UPDATE with raw expression
 int affected = db.update("users")
-    .set("name", "Jane")
-    .setRaw("updated_at", "NOW())
-    .where(eq("id", 1))
+    .set("name", "Alice Smith")
+    .where(eq("email", "alice@example.com"))
     .execute();
 
-// DELETE
 int deleted = db.delete("users")
-    .where(eq("id", 1))
+    .where(eq("active", false))
     .execute();
+```
 
-// Transaction
+## Defining schema in Java
+
+For a Drizzle-like workflow, create a dedicated schema class such as `DbSchema.java`:
+
+```java
+package com.example.app.db;
+
+import com.bitaspire.jdborm.schema.Schema;
+
+public final class DbSchema {
+
+    private DbSchema() {
+    }
+
+    public static final Schema SCHEMA = Schema.create()
+        .table("users", table -> table
+            .column("id", "UUID", col -> col.defaultPostgresUuid().primaryKey())
+            .column("email", "VARCHAR(255)", col -> col.notNull().unique())
+            .column("name", "VARCHAR(100)", col -> col.notNull())
+            .column("created_at", "TIMESTAMP", col -> col.defaultExpression("CURRENT_TIMESTAMP"))
+            .index("idx_users_email", idx -> idx.on("email").unique()))
+
+        .table("posts", table -> table
+            .column("id", "UUID", col -> col.defaultPostgresUuid().primaryKey())
+            .column("user_id", "UUID", col -> col.notNull().references("users(id)"))
+            .column("title", "VARCHAR(200)", col -> col.notNull())
+            .column("content", "TEXT")
+            .column("created_at", "TIMESTAMP", col -> col.defaultExpression("CURRENT_TIMESTAMP"))
+            .index("idx_posts_user_id", "user_id"));
+}
+```
+
+Push it during application/plugin startup:
+
+```java
+JdbORM db = JdbORM.create(dataSource);
+
+var result = db.pushSchema(DbSchema.SCHEMA);
+if (result.changed()) {
+    result.executedSql().forEach(System.out::println);
+}
+```
+
+### `pushSchema()` behavior
+
+`pushSchema()` is intentionally **additive and safe by default**:
+
+| Declared object | If missing | If already exists |
+|-----------------|------------|-------------------|
+| Table | Created with all declared columns and table-level constraints | Kept as-is |
+| Column | Added via `ALTER TABLE ... ADD COLUMN` | Kept as-is; existing type/default is not rewritten |
+| Index | Created | Kept as-is |
+| Table-level constraint | Created with a new table | Fails fast on existing tables; use explicit migration SQL |
+
+Additional notes:
+
+- Schema-qualified names are supported, for example `PUBLIC.users`.
+- Metadata lookup is schema-aware and avoids confusing tables/indexes across schemas.
+- The push runs transactionally where the JDBC/database combination supports transactional DDL, with best-effort cleanup for DDL changes made before a later failure.
+- `schema.toSql()` returns idempotent preview statements using `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS`.
+
+## UUID helpers
+
+### Database-generated UUID defaults
+
+```java
+import com.bitaspire.jdborm.schema.Schema;
+import com.bitaspire.jdborm.schema.UuidDialect;
+
+Schema schema = Schema.create()
+    .table("users", table -> table
+        // PostgreSQL: requires pgcrypto extension for gen_random_uuid()
+        .column("id", "UUID", col -> col.defaultPostgresUuid().primaryKey())
+
+        // MySQL/HSQLDB-style UUID() default
+        .column("external_id", "CHAR(36)", col -> col.defaultUuid(UuidDialect.MYSQL)));
+```
+
+### Java-generated UUIDs
+
+```java
+import com.bitaspire.jdborm.schema.Uuids;
+
+UUID randomId = Uuids.v4();
+UUID orderedId = Uuids.v7(); // RFC 9562 time-ordered UUID
+
+db.insert("users")
+    .set("id", orderedId)
+    .set("email", "alice@example.com")
+    .execute();
+```
+
+UUIDv7 is the newest standardized time-ordered UUID format in RFC 9562. UUIDv10 is not currently a standard UUID version.
+
+## Query examples
+
+### Conditions
+
+```java
+List<User> users = db.select("*")
+    .from("users")
+    .where(and(
+        eq("status", "active"),
+        or(eq("role", "admin"), eq("role", "moderator")),
+        not(eq("banned", true))
+    ))
+    .execute(User.class);
+```
+
+Common condition helpers via `import static com.bitaspire.jdborm.condition.Conditions.*;`:
+
+| Method | SQL output |
+|--------|------------|
+| `eq("col", val)` | `col = ?` |
+| `ne("col", val)` | `col <> ?` |
+| `gt("col", val)` | `col > ?` |
+| `gte("col", val)` | `col >= ?` |
+| `lt("col", val)` | `col < ?` |
+| `lte("col", val)` | `col <= ?` |
+| `like("col", val)` | `col LIKE ?` |
+| `in("col", v1, v2)` | `col IN (?, ?)` |
+| `between("col", a, b)` | `col BETWEEN ? AND ?` |
+| `isNull("col")` | `col IS NULL` |
+| `isNotNull("col")` | `col IS NOT NULL` |
+| `not(cond)` | `NOT (cond)` |
+| `and(c1, c2, ...)` | `c1 AND c2 AND ...` |
+| `or(c1, c2, ...)` | `c1 OR c2 OR ...` |
+| `raw("sql")` | Raw SQL fragment |
+
+### Joins
+
+```java
+List<Post> posts = db.select("u.id", "u.name", "p.title")
+    .from("users u")
+    .join("posts p", "p.user_id", "u.id")
+    .leftJoin("comments c", "c.post_id", "p.id")
+    .execute(Post.class);
+```
+
+### Custom row mapping
+
+```java
+List<User> users = db.select("id", "name")
+    .from("users")
+    .execute((rs, rowNum) -> new User(
+        rs.getLong("id"),
+        rs.getString("name")
+    ));
+```
+
+### Scalar query
+
+```java
+Long count = db.select("count(*)")
+    .from("users")
+    .executeScalar(Long.class);
+```
+
+### Batch insert
+
+```java
+InsertQuery insert = db.insert("users");
+insert.set("name", "Alice").addBatch();
+insert.set("name", "Bob").addBatch();
+int[] counts = insert.executeBatch();
+```
+
+### Upsert / ON CONFLICT
+
+```java
+db.insert("users")
+    .set("id", Uuids.v7())
+    .set("email", "alice@example.com")
+    .set("name", "Alice")
+    .onConflict("email")
+    .doUpdateSet(
+        InsertQuery.excluded("name"),
+        InsertQuery.setClause("updated_at", "CURRENT_TIMESTAMP")
+    )
+    .execute();
+```
+
+### Transactions
+
+```java
 db.inTransaction(tx -> {
     tx.insert("users").set("name", "John").execute();
     tx.update("accounts").set("balance", 100).where(eq("id", 1)).execute();
     return null;
 });
-
-// Raw SQL
-db.execute("UPDATE users SET name = ? WHERE id = ?", "John", 1);
-List<User> users = db.query("SELECT * FROM users WHERE id = ?",
-    (rs, i) -> new User(rs.getLong("id"), rs.getString("name")), 1);
 ```
 
-## Conditions API
-
-| Method | SQL output | Example |
-|--------|------------|---------|
-| `eq("col", val)` | `col = ?` | `eq("status", "active")` |
-| `ne("col", val)` | `col <> ?` | `ne("age", 18)` |
-| `gt("col", val)` | `col > ?` | `gt("price", 100)` |
-| `gte("col", val)` | `col >= ?` | `gte("score", 50)` |
-| `lt("col", val)` | `col < ?` | `lt("age", 21)` |
-| `lte("col", val)` | `col <= ?` | `lte("rating", 5)` |
-| `like("col", val)` | `col LIKE ?` | `like("name", "%john%")` |
-| `in("col", v1, v2)` | `col IN (?, ?)` | `in("id", 1, 2, 3)` |
-| `between("col", a, b)` | `col BETWEEN ? AND ?` | `between("price", 10, 50)` |
-| `isNull("col")` | `col IS NULL` | `isNull("deleted_at")` |
-| `isNotNull("col")` | `col IS NOT NULL` | `isNotNull("email")` |
-| `not(cond)` | `NOT (cond)` | `not(eq("banned", true))` |
-| `cond1.and(cond2)` | `cond1 AND cond2` | `eq("a", 1).and(eq("b", 2))` |
-| `cond1.or(cond2)` | `cond1 OR cond2` | `eq("a", 1).or(eq("b", 2))` |
-| `and(c1, c2, ...)` | `c1 AND c2 AND ...` | `and(eq("a",1), eq("b",2))` |
-| `or(c1, c2, ...)` | `c1 OR c2 OR ...` | `or(eq("a",1), eq("b",2))` |
-| `raw("sql")` | Raw SQL fragment | `raw("NOW()")` |
-
-### Compound conditions example
+### Raw SQL
 
 ```java
-where(and(
-    eq("status", "active"),
-    or(eq("role", "admin"), eq("role", "moderator")),
-    not(eq("banned", true))
-));
+int updated = db.execute("UPDATE users SET name = ? WHERE id = ?", "John", 1);
+
+List<User> users = db.query(
+    "SELECT * FROM users WHERE id = ?",
+    (rs, rowNum) -> new User(rs.getLong("id"), rs.getString("name")),
+    1
+);
 ```
 
-## Joins
+## DDL builder examples
+
+If you prefer explicit DDL commands over declarative schema push:
 
 ```java
-List<Post> posts = db.select("u.id", "p.title")
-    .from("users u")
-    .join("posts p", "p.user_id", "u.id")
-    .leftJoin("comments c", "c.post_id", "p.id")
-    .rightJoin("likes l", "l.post_id", "p.id")
-    .execute(Post.class);
+db.createTable("users")
+    .ifNotExists()
+    .column("id", "UUID PRIMARY KEY")
+    .column("email", "VARCHAR(255) NOT NULL UNIQUE")
+    .execute();
+
+db.alterTable("users")
+    .addColumnIfNotExists("created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+    .execute();
+
+db.createIndex("idx_users_email")
+    .on("users", "email")
+    .unique()
+    .ifNotExists()
+    .execute();
 ```
 
-## Query API overview
+## API overview
 
-| Builder | Key methods | Returns |
-|---------|-------------|---------|
-| `JdbORM` | `.execute(sql, params)`, `.query(sql, mapper, params)`, `.inTransaction(callback)` | `int`, `List<T>`, `T` |
-| `SelectQuery` | `.from()`, `.where()`, `.join()`, `.orderBy()`, `.limit()`, `.offset()` | `List<T>` / `execute(Class)`, `execute(RowMapper)`, `executeScalar(Class)` |
-| `InsertQuery` | `.set()`, `.setRaw()`, `.onConflict()`, `.onConflictOnConstraint()`, `.doNothing()`, `.doUpdateSet()`, `.onConflictDoNothing()`, `.onConflictDoUpdate()`, `.addBatch()` | `GeneratedKeys`, `int[]` |
-| `UpdateQuery` | `.set()`, `.setRaw()`, `.where()` | `int` (affected rows) |
-| `DeleteQuery` | `.where()` | `int` (affected rows) |
+| Area | Main entry points |
+|------|-------------------|
+| Query builders | `select()`, `insert()`, `update()`, `delete()` |
+| Raw SQL | `execute()`, `query()`, `querySingle()` |
+| Transactions | `inTransaction()` |
+| DDL builders | `createTable()`, `alterTable()`, `dropTable()`, `createIndex()`, `dropIndex()` |
+| Declarative schema | `Schema.create()`, `pushSchema()`, `SchemaPushResult` |
+| UUID helpers | `Uuids.v4()`, `Uuids.v7()`, `defaultPostgresUuid()`, `defaultUuid()` |
+| Debugging | every query supports `toSql()` and `getParameters()` |
 
-All builders support `.toSql()` and `.getParameters()` for debugging.
-
-## Features added in v0.4.1
-
-- Fix `InsertQuery.executeBatch()` to correctly bind `null` parameter values via `PreparedStatement.setNull()`
-- Fix `InsertQuery.executeBatch()` to use single-row INSERT SQL with `addBatch()`, preventing "parameter not set" errors on JDBC batch execution
-- Add integration test for batch insert with nullable columns
-
-## Features added in v0.4.0
-
-- ON CONFLICT target API: `.onConflict(columns)` + `.doNothing()` / `.doUpdateSet(clauses)`
-- ON CONFLICT ON CONSTRAINT: `.onConflictOnConstraint(name)` for named constraints
-- Static helpers: `InsertQuery.excluded(col)` and `InsertQuery.setClause(col, expr)`
-- Unified batch columns: batch rows with different column sets now produce correct SQL
-- Deprecated old methods: `.onConflictDoNothing()` → `.onConflict().doNothing()`, `.onConflictDoUpdate()` → `.onConflict().doUpdateSet()`
-
-## Features added in v0.3.1
-
-- `addColumnIfNotExists()` on `AlterTableQuery` — safe ADD COLUMN for PostgreSQL and others
-
-## Features added in v0.3.0
-
-- DDL schema management: `createTable()`, `alterTable()`, `dropTable()`
-- `truncateTable()`, `renameTable()` for table management
-- `createIndex()`, `dropIndex()` for index management
-- Table-level constraints: PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK
-- IF EXISTS / IF NOT EXISTS and CASCADE support
-- Full type-safe API via `Table` and `Column` overloads
-
-## Features added in v0.2.1
-
-- Raw SQL execution (`execute()`, `query()`, `querySingle()`)
-- `setRaw()` for SQL expressions in INSERT/UPDATE (`NOW()`, `counter + 1`, etc.)
-- `ON CONFLICT DO NOTHING` / `ON CONFLICT DO UPDATE` on INSERT
-- Custom `RowMapper` on SELECT (no reflection needed)
-- `executeScalar()` for single-value results
-- Batch INSERT with `addBatch()` / `executeBatch()`
-- Transaction API (`inTransaction()`)
-
-## AI Assistant Skill
-
-jdborm comes with an AI skill that gives coding assistants deep knowledge of the entire API:
-
-```bash
-npx jdborm-ai-skill
-```
-
-Run this once in your project to install `.agents/skills/jdborm/SKILL.md` — your AI will then be able to write correct jdborm queries without being prompted about the API each time.
-
-## Build
+## Build and test
 
 ```bash
 ./gradlew build
+./gradlew test
 ```
-
-## Requirements
-
-- Java 17+
-- No external runtime dependencies
 
 ## License
 

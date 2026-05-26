@@ -16,17 +16,26 @@ import com.bitaspire.jdborm.query.TransactionCallback;
 import com.bitaspire.jdborm.query.TruncateQuery;
 import com.bitaspire.jdborm.query.UpdateQuery;
 import com.bitaspire.jdborm.schema.Column;
+import com.bitaspire.jdborm.schema.ColumnDefinition;
+import com.bitaspire.jdborm.schema.IndexDefinition;
+import com.bitaspire.jdborm.schema.Schema;
+import com.bitaspire.jdborm.schema.SchemaPushResult;
 import com.bitaspire.jdborm.schema.Table;
+import com.bitaspire.jdborm.schema.TableDefinition;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 
 /**
  * Entry point for the JdbORM fluent query builder API.
@@ -303,6 +312,232 @@ public class JdbORM {
      */
     public DropIndexQuery dropIndex(String indexName) {
         return new DropIndexQuery(this, indexName);
+    }
+
+    /**
+     * Pushes a declarative schema to the connected database.
+     * <p>
+     * The push is additive and metadata-driven: missing tables are created,
+     * missing columns are added with {@code ALTER TABLE}, and missing indexes
+     * are created. Existing tables, columns, indexes, and data are left intact;
+     * existing column definitions are not modified and objects are never dropped.
+     * </p>
+     *
+     * @param schema the declarative schema to push
+     * @return details about SQL statements executed during the push
+     * @throws JdbOrmException if metadata inspection or SQL execution fails
+     * @throws NullPointerException if {@code schema} is {@code null}
+     */
+    public SchemaPushResult pushSchema(Schema schema) {
+        Objects.requireNonNull(schema, "schema");
+        Connection conn = getConnection();
+        List<String> executedSql = new ArrayList<>();
+        List<String> rollbackSql = new ArrayList<>();
+        boolean originalAutoCommit = true;
+        try {
+            originalAutoCommit = conn.getAutoCommit();
+            if (originalAutoCommit) {
+                conn.setAutoCommit(false);
+            }
+
+            DatabaseMetaData metaData = conn.getMetaData();
+            String catalog = conn.getCatalog();
+            String defaultSchema = currentSchema(conn);
+
+            for (TableDefinition table : schema.tables()) {
+                QualifiedName tableName = qualifiedName(table.name(), defaultSchema);
+                boolean exists = tableExists(metaData, catalog, tableName);
+                if (!exists) {
+                    String sql = table.toSql(false);
+                    executeSchemaStatement(conn, sql);
+                    executedSql.add(sql);
+                    rollbackSql.add("DROP TABLE " + table.name());
+                } else {
+                    rejectUnsupportedConstraintEvolution(table);
+                    for (ColumnDefinition column : table.columns()) {
+                        if (!columnExists(metaData, catalog, tableName, column.name())) {
+                            String sql = "ALTER TABLE " + table.name() + " ADD COLUMN " + column.toSql();
+                            executeSchemaStatement(conn, sql);
+                            executedSql.add(sql);
+                            rollbackSql.add("ALTER TABLE " + table.name() + " DROP COLUMN " + column.name());
+                        }
+                    }
+                }
+
+                for (IndexDefinition index : table.indexes()) {
+                    if (!indexExists(metaData, catalog, tableName, index.name())) {
+                        String sql = index.toSql(false);
+                        executeSchemaStatement(conn, sql);
+                        executedSql.add(sql);
+                        rollbackSql.add("DROP INDEX " + index.name());
+                    }
+                }
+            }
+
+            if (originalAutoCommit) {
+                conn.commit();
+            }
+            return new SchemaPushResult(executedSql);
+        } catch (Exception e) {
+            if (originalAutoCommit) {
+                try {
+                    conn.rollback();
+                } catch (SQLException ignored) {
+                }
+                rollbackSchemaChanges(conn, rollbackSql);
+            }
+            if (e instanceof JdbOrmException jdbOrmException) {
+                throw jdbOrmException;
+            }
+            throw new JdbOrmException("Failed to push schema", e);
+        } finally {
+            try {
+                if (originalAutoCommit) {
+                    conn.setAutoCommit(true);
+                }
+            } catch (SQLException ignored) {
+            }
+            if (useDataSource && conn != null) {
+                try {
+                    conn.close();
+                } catch (SQLException ignored) {
+                }
+            }
+        }
+    }
+
+    private void executeSchemaStatement(Connection conn, String sql) throws SQLException {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.executeUpdate(sql);
+        }
+    }
+
+    private void rollbackSchemaChanges(Connection conn, List<String> rollbackSql) {
+        for (int i = rollbackSql.size() - 1; i >= 0; i--) {
+            try {
+                executeSchemaStatement(conn, rollbackSql.get(i));
+            } catch (SQLException ignored) {
+            }
+        }
+        try {
+            conn.commit();
+        } catch (SQLException ignored) {
+        }
+    }
+
+    private String currentSchema(Connection conn) throws SQLException {
+        String schema = conn.getSchema();
+        return schema == null || schema.isBlank() ? null : schema;
+    }
+
+    private void rejectUnsupportedConstraintEvolution(TableDefinition table) {
+        if (!table.constraints().isEmpty()) {
+            throw new JdbOrmException("pushSchema cannot diff table-level constraints for existing table "
+                    + table.name()
+                    + ". Create constraints with the table or use explicit migration SQL for later constraint changes.");
+        }
+    }
+
+    private boolean tableExists(DatabaseMetaData metaData, String catalog, QualifiedName tableName) throws SQLException {
+        for (String schemaCandidate : schemaCandidates(tableName.schema())) {
+            for (String tableCandidate : identifierCandidates(tableName.name())) {
+                try (ResultSet rs = metaData.getTables(catalog, schemaCandidate, tableCandidate, new String[]{"TABLE"})) {
+                    while (rs.next()) {
+                        if (metadataRowMatches(tableName, rs.getString("TABLE_SCHEM"), rs.getString("TABLE_NAME"))) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean columnExists(DatabaseMetaData metaData, String catalog, QualifiedName tableName, String columnName) throws SQLException {
+        for (String schemaCandidate : schemaCandidates(tableName.schema())) {
+            for (String tableCandidate : identifierCandidates(tableName.name())) {
+                for (String columnCandidate : identifierCandidates(columnName)) {
+                    try (ResultSet rs = metaData.getColumns(catalog, schemaCandidate, tableCandidate, columnCandidate)) {
+                        while (rs.next()) {
+                            if (metadataRowMatches(tableName, rs.getString("TABLE_SCHEM"), rs.getString("TABLE_NAME"))
+                                    && equalsIdentifier(columnName, rs.getString("COLUMN_NAME"))) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean indexExists(DatabaseMetaData metaData, String catalog, QualifiedName tableName, String indexName) throws SQLException {
+        for (String schemaCandidate : schemaCandidates(tableName.schema())) {
+            for (String tableCandidate : identifierCandidates(tableName.name())) {
+                try (ResultSet rs = metaData.getIndexInfo(catalog, schemaCandidate, tableCandidate, false, false)) {
+                    while (rs.next()) {
+                        String existingName = rs.getString("INDEX_NAME");
+                        if (existingName != null
+                                && metadataRowMatches(tableName, rs.getString("TABLE_SCHEM"), rs.getString("TABLE_NAME"))
+                                && equalsIdentifier(indexName, existingName)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private QualifiedName qualifiedName(String identifier, String defaultSchema) {
+        String trimmed = Objects.requireNonNull(identifier, "identifier").trim();
+        if (trimmed.isEmpty()) {
+            throw new JdbOrmException("Schema object names must not be blank");
+        }
+        if (trimmed.chars().anyMatch(Character::isWhitespace)) {
+            throw new JdbOrmException("Schema object names must be bare identifiers or schema-qualified identifiers: " + identifier);
+        }
+        int firstDot = trimmed.indexOf('.');
+        if (firstDot < 0) {
+            if (defaultSchema == null) {
+                throw new JdbOrmException("Cannot inspect unqualified schema object without a current JDBC schema; use schema-qualified name: " + identifier);
+            }
+            return new QualifiedName(defaultSchema, trimmed);
+        }
+        if (firstDot != trimmed.lastIndexOf('.') || firstDot == 0 || firstDot == trimmed.length() - 1) {
+            throw new JdbOrmException("Schema object names may contain at most one schema qualifier: " + identifier);
+        }
+        return new QualifiedName(trimmed.substring(0, firstDot), trimmed.substring(firstDot + 1));
+    }
+
+    private List<String> schemaCandidates(String schema) {
+        return schema == null ? List.of((String) null) : identifierCandidates(schema);
+    }
+
+    private List<String> identifierCandidates(String identifier) {
+        String trimmed = identifier.trim();
+        String upper = trimmed.toUpperCase(Locale.ROOT);
+        String lower = trimmed.toLowerCase(Locale.ROOT);
+        List<String> candidates = new ArrayList<>();
+        candidates.add(trimmed);
+        if (!candidates.contains(upper)) {
+            candidates.add(upper);
+        }
+        if (!candidates.contains(lower)) {
+            candidates.add(lower);
+        }
+        return candidates;
+    }
+
+    private boolean metadataRowMatches(QualifiedName expected, String actualSchema, String actualName) {
+        return equalsIdentifier(expected.schema(), actualSchema) && equalsIdentifier(expected.name(), actualName);
+    }
+
+    private boolean equalsIdentifier(String expected, String actual) {
+        return expected != null && actual != null && expected.equalsIgnoreCase(actual);
+    }
+
+    private record QualifiedName(String schema, String name) {
     }
 
     /**
