@@ -7,6 +7,17 @@
 A lightweight, zero-dependency Java library inspired by [Drizzle ORM](https://orm.drizzle.team).  
 Write type-safe SQL queries using fluent method chaining instead of raw string concatenation.
 
+## Requirements
+
+- Java 17+
+- No external runtime dependencies
+
+## Build
+
+```bash
+./gradlew build
+```
+
 ## Quick Start
 
 ### 1. Add dependency
@@ -40,6 +51,16 @@ dependencies {
     <version>0.4.1</version>
 </dependency>
 ```
+
+### Need help with JdbORM? Ask your AI agent with this AI skill!
+
+jdborm comes with an AI skill that gives coding assistants deep knowledge of the entire API:
+
+```bash
+npx jdborm-ai-skill
+```
+
+Run this once in your project to install `.agents/skills/jdborm/SKILL.md` — your AI will then be able to write correct jdborm queries without being prompted about the API each time.
 
 ### 2. Use it
 
@@ -115,8 +136,8 @@ Schema schema = Schema.create()
         .column("created_at", "TIMESTAMP", col -> col.defaultExpression("CURRENT_TIMESTAMP"))
         .index("idx_users_email", idx -> idx.on("email").unique()))
     .table("posts", table -> table
-        .column("id", "INTEGER", col -> col.generatedByDefaultAsIdentity().primaryKey())
-        .column("user_id", "INTEGER", col -> col.notNull())
+        .column("id", "UUID", col -> col.defaultPostgresUuid().primaryKey())
+        .column("user_id", "UUID", col -> col.notNull())
         .column("title", "VARCHAR(200)", col -> col.notNull())
         .foreignKey("user_id", "users(id)")
         .index("idx_posts_user_id", "user_id"));
@@ -125,7 +146,7 @@ var result = db.pushSchema(schema);
 System.out.println(result.executedSql());
 ```
 
-`pushSchema()` is additive: it creates missing tables, adds missing columns, and creates missing indexes. It does not drop tables/columns/indexes or rewrite existing column definitions.
+`pushSchema()` is additive: it creates missing tables, adds missing columns, and creates missing indexes. It does not drop tables/columns/indexes or rewrite existing column definitions. Table-level constraints are created together with new tables; later constraint changes on already existing tables should be handled with explicit migration SQL.
 
 Use `schema.toSql()` to preview idempotent `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS` statements without executing them.
 
@@ -211,64 +232,6 @@ List<Post> posts = db.select("u.id", "p.title")
 | `DeleteQuery` | `.where()` | `int` (affected rows) |
 
 All builders support `.toSql()` and `.getParameters()` for debugging.
-
-## Features added in v0.4.1
-
-- Fix `InsertQuery.executeBatch()` to correctly bind `null` parameter values via `PreparedStatement.setNull()`
-- Fix `InsertQuery.executeBatch()` to use single-row INSERT SQL with `addBatch()`, preventing "parameter not set" errors on JDBC batch execution
-- Add integration test for batch insert with nullable columns
-
-## Features added in v0.4.0
-
-- ON CONFLICT target API: `.onConflict(columns)` + `.doNothing()` / `.doUpdateSet(clauses)`
-- ON CONFLICT ON CONSTRAINT: `.onConflictOnConstraint(name)` for named constraints
-- Static helpers: `InsertQuery.excluded(col)` and `InsertQuery.setClause(col, expr)`
-- Unified batch columns: batch rows with different column sets now produce correct SQL
-- Deprecated old methods: `.onConflictDoNothing()` → `.onConflict().doNothing()`, `.onConflictDoUpdate()` → `.onConflict().doUpdateSet()`
-
-## Features added in v0.3.1
-
-- `addColumnIfNotExists()` on `AlterTableQuery` — safe ADD COLUMN for PostgreSQL and others
-
-## Features added in v0.3.0
-
-- DDL schema management: `createTable()`, `alterTable()`, `dropTable()`
-- `truncateTable()`, `renameTable()` for table management
-- `createIndex()`, `dropIndex()` for index management
-- Table-level constraints: PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK
-- IF EXISTS / IF NOT EXISTS and CASCADE support
-- Full type-safe API via `Table` and `Column` overloads
-
-## Features added in v0.2.1
-
-- Raw SQL execution (`execute()`, `query()`, `querySingle()`)
-- `setRaw()` for SQL expressions in INSERT/UPDATE (`NOW()`, `counter + 1`, etc.)
-- `ON CONFLICT DO NOTHING` / `ON CONFLICT DO UPDATE` on INSERT
-- Custom `RowMapper` on SELECT (no reflection needed)
-- `executeScalar()` for single-value results
-- Batch INSERT with `addBatch()` / `executeBatch()`
-- Transaction API (`inTransaction()`)
-
-## AI Assistant Skill
-
-jdborm comes with an AI skill that gives coding assistants deep knowledge of the entire API:
-
-```bash
-npx jdborm-ai-skill
-```
-
-Run this once in your project to install `.agents/skills/jdborm/SKILL.md` — your AI will then be able to write correct jdborm queries without being prompted about the API each time.
-
-## Build
-
-```bash
-./gradlew build
-```
-
-## Requirements
-
-- Java 17+
-- No external runtime dependencies
 
 ## License
 

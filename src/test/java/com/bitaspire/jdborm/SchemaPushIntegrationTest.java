@@ -1,5 +1,6 @@
 package com.bitaspire.jdborm;
 
+import com.bitaspire.jdborm.exception.JdbOrmException;
 import com.bitaspire.jdborm.schema.Schema;
 import com.bitaspire.jdborm.schema.SchemaPushResult;
 import org.junit.jupiter.api.AfterEach;
@@ -69,5 +70,55 @@ class SchemaPushIntegrationTest {
         assertFalse(thirdPush.changed());
         assertEquals(0, thirdPush.statementsExecuted());
         assertTrue(thirdPush.executedSql().isEmpty());
+    }
+
+    @Test
+    void pushSchemaDoesNotConfuseTablesAcrossSchemas() {
+        db.execute("CREATE SCHEMA tenant_a AUTHORIZATION SA");
+        db.execute("CREATE TABLE tenant_a.users (id INTEGER)");
+
+        Schema schema = Schema.create()
+                .table("PUBLIC.users", table -> table
+                        .column("id", "INTEGER")
+                        .column("email", "VARCHAR(255)")
+                        .index("idx_public_users_email", "email"));
+
+        SchemaPushResult result = db.pushSchema(schema);
+
+        assertEquals(List.of(
+                "CREATE TABLE PUBLIC.users (id INTEGER, email VARCHAR(255))",
+                "CREATE INDEX idx_public_users_email ON PUBLIC.users (email)"), result.executedSql());
+        db.insert("PUBLIC.users").set("id", 1).set("email", "public@example.com").execute();
+        db.insert("tenant_a.users").set("id", 2).execute();
+    }
+
+    @Test
+    void pushSchemaFailsFastForTableLevelConstraintsOnExistingTables() {
+        db.execute("CREATE TABLE users (id INTEGER)");
+
+        Schema schema = Schema.create()
+                .table("users", table -> table
+                        .column("id", "INTEGER")
+                        .primaryKey("id"));
+
+        JdbOrmException exception = assertThrows(JdbOrmException.class, () -> db.pushSchema(schema));
+
+        assertTrue(exception.getMessage().contains("cannot diff table-level constraints"));
+    }
+
+    @Test
+    void pushSchemaRollsBackWhenLaterStatementFails() {
+        Schema invalid = Schema.create()
+                .table("rollback_ok", table -> table.column("id", "INTEGER"))
+                .table("rollback_bad", table -> table.column("id", "INTEGER DEFAULT ("));
+
+        assertThrows(JdbOrmException.class, () -> db.pushSchema(invalid));
+
+        Schema valid = Schema.create()
+                .table("rollback_ok", table -> table.column("id", "INTEGER"));
+
+        SchemaPushResult result = db.pushSchema(valid);
+
+        assertEquals(List.of("CREATE TABLE rollback_ok (id INTEGER)"), result.executedSql());
     }
 }
