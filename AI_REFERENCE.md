@@ -8,7 +8,7 @@ Complete API reference for AI coding assistants.
 
 ## Core principles
 
-- Java 17+.
+- Java 8+.
 - Zero external runtime dependencies.
 - Fluent mutable builders.
 - JDBC-friendly APIs; no annotation processors or entity manager state.
@@ -329,13 +329,13 @@ List<User> mapped = db.select("id", "name")
     .execute((rs, rowNum) -> new User(rs.getLong("id"), rs.getString("name")));
 
 // INSERT with UUIDv7
-var keys = db.insert("users")
+InsertQuery.GeneratedKeys keys = db.insert("users")
     .set("id", Uuids.v7())
     .set("email", "alice@example.com")
     .execute();
 
 // UPSERT
-var upsertKeys = db.insert("users")
+InsertQuery.GeneratedKeys upsertKeys = db.insert("users")
     .set("email", "alice@example.com")
     .set("name", "Alice")
     .onConflict("email")

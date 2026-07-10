@@ -1,5 +1,6 @@
 package com.bitaspire.jdborm.schema;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
@@ -22,7 +23,7 @@ public final class SchemaPushResult {
      * @throws NullPointerException if {@code executedSql} is {@code null}
      */
     public SchemaPushResult(List<String> executedSql) {
-        this.executedSql = List.copyOf(Objects.requireNonNull(executedSql, "executedSql"));
+this.executedSql = Collections.unmodifiableList(new ArrayList<String>(Objects.requireNonNull(executedSql, "executedSql")));
     }
 
     /**

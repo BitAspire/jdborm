@@ -120,8 +120,8 @@ public class UpdateQuery implements Query {
             if (i > 0) sql.append(", ");
             sql.append(columns.get(i)).append(" = ");
             Object val = values.get(columns.get(i));
-            if (val instanceof RawExpression expr) {
-                sql.append(expr.expression());
+            if (val instanceof RawExpression) {
+                sql.append(((RawExpression) val).expression());
             } else {
                 sql.append("?");
             }

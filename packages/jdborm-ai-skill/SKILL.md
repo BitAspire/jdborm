@@ -5,7 +5,7 @@ description: Fluent JDBC query builder for Java. Provides Drizzle-like SELECT/IN
 
 # jdborm Skill
 
-This skill provides deep knowledge of the [jdborm](https://github.com/BitAspire/jdbc-orm-manager) library — a lightweight, zero-dependency Java 17+ fluent JDBC query builder inspired by Drizzle ORM.
+This skill provides deep knowledge of the [jdborm](https://github.com/BitAspire/jdbc-orm-manager) library — a lightweight, zero-dependency Java 8+ fluent JDBC query builder inspired by Drizzle ORM.
 
 ## Core rules
 
@@ -48,7 +48,7 @@ List<User> users = db.select("id", "name")
 ### INSERT / UPDATE / DELETE
 
 ```java
-var keys = db.insert("users")
+InsertQuery.GeneratedKeys keys = db.insert("users")
     .set("id", Uuids.v7())
     .set("email", "alice@example.com")
     .execute();

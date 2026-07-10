@@ -171,7 +171,7 @@ public final class IndexDefinition {
      * @throws IllegalStateException if no table or columns were configured
      */
     public String toSql(boolean ifNotExists) {
-        if (table == null || table.isBlank()) {
+        if (table == null || table.trim().isEmpty()) {
             throw new IllegalStateException("Index table must be configured");
         }
         if (columns.isEmpty()) {

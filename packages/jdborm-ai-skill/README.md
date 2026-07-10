@@ -1,6 +1,6 @@
 # jdborm AI Skill
 
-AI assistant skill for [jdborm](https://github.com/BitAspire/jdbc-orm-manager), a zero-dependency Java 17+ fluent JDBC query builder inspired by Drizzle ORM.
+AI assistant skill for [jdborm](https://github.com/BitAspire/jdbc-orm-manager), a zero-dependency Java 8+ fluent JDBC query builder inspired by Drizzle ORM.
 
 The skill gives coding assistants practical knowledge of:
 

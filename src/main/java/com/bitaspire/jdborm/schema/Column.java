@@ -77,7 +77,8 @@ public final class Column<T> {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof Column<?> column)) return false;
+        if (!(o instanceof Column<?>)) return false;
+        Column<?> column = (Column<?>) o;
         return qualifiedName.equals(column.qualifiedName);
     }
 

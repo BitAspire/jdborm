@@ -91,10 +91,14 @@ public final class Uuids {
      */
     public static UUID generate(UuidVersion version) {
         Objects.requireNonNull(version, "version");
-        return switch (version) {
-            case V4 -> randomV4();
-            case V7 -> timeOrderedV7();
-        };
+        switch (version) {
+            case V4:
+                return randomV4();
+            case V7:
+                return timeOrderedV7();
+            default:
+                throw new IllegalArgumentException("Unsupported UUID version: " + version);
+        }
     }
 
     /**
@@ -112,9 +116,14 @@ public final class Uuids {
      */
     public static String defaultExpression(UuidDialect dialect) {
         Objects.requireNonNull(dialect, "dialect");
-        return switch (dialect) {
-            case POSTGRES -> "gen_random_uuid()";
-            case MYSQL, HSQLDB -> "UUID()";
-        };
+        switch (dialect) {
+            case POSTGRES:
+                return "gen_random_uuid()";
+            case MYSQL:
+            case HSQLDB:
+                return "UUID()";
+            default:
+                throw new IllegalArgumentException("Unsupported UUID dialect: " + dialect);
+        }
     }
 }
