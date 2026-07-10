@@ -23,7 +23,7 @@ public final class SchemaPushResult {
      * @throws NullPointerException if {@code executedSql} is {@code null}
      */
     public SchemaPushResult(List<String> executedSql) {
-        this.executedSql = new ArrayList<String>(Objects.requireNonNull(executedSql, "executedSql"));
+this.executedSql = Collections.unmodifiableList(new ArrayList<String>(Objects.requireNonNull(executedSql, "executedSql")));
     }
 
     /**
