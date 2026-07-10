@@ -7,6 +7,7 @@ import com.bitaspire.jdborm.schema.Table;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -35,7 +36,7 @@ public class TruncateQuery implements Query {
 
     @Override
     public List<Object> getParameters() {
-        return List.of();
+        return Collections.emptyList();
     }
 
     /**

@@ -1,10 +1,10 @@
 # jdborm — Fluent JDBC Query Builder
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Java 17+](https://img.shields.io/badge/Java-17%2B-blue.svg)](https://openjdk.org/projects/jdk/17/)
+[![Java 8+](https://img.shields.io/badge/Java-8%2B-blue.svg)](https://openjdk.org/projects/jdk/8/)
 [![](https://jitpack.io/v/BitAspire/jdborm.svg)](https://jitpack.io/#BitAspire/jdborm)
 
-**jdborm** is a lightweight, zero-dependency Java 17+ library inspired by [Drizzle ORM](https://orm.drizzle.team).
+**jdborm** is a lightweight, zero-dependency Java 8+ library inspired by [Drizzle ORM](https://orm.drizzle.team).
 It gives you a fluent JDBC API for queries, DDL, transactions, and declarative schema push — without annotation processors, runtime magic, or heavyweight ORM state.
 
 ```java
@@ -32,7 +32,7 @@ This installs `.agents/skills/jdborm/SKILL.md` with examples and API notes.
 
 ## Why jdborm?
 
-- **Zero runtime dependencies** — just Java 17+ and JDBC.
+- **Zero runtime dependencies** — just Java 8+ and JDBC.
 - **Fluent SQL builders** — SELECT, INSERT, UPDATE, DELETE, joins, ordering, limits, and raw SQL escape hatches.
 - **Parameterized conditions** — safer SQL generation with ordered `?` parameters.
 - **Custom or reflection mapping** — map rows with `RowMapper<T>` or simple POJO field matching.
@@ -42,7 +42,8 @@ This installs `.agents/skills/jdborm/SKILL.md` with examples and API notes.
 
 ## Requirements
 
-- Java 17+
+- Java 8+ at runtime
+- Java 17+ to build this checkout with the included Gradle 9 wrapper
 - JDBC driver for your database
 - No external runtime dependencies from jdborm itself
 
@@ -95,7 +96,7 @@ List<User> activeUsers = db.select("id", "name", "email")
     .orderBy("name")
     .execute(User.class);
 
-var keys = db.insert("users")
+InsertQuery.GeneratedKeys keys = db.insert("users")
     .set("name", "Alice")
     .set("email", "alice@example.com")
     .execute();
@@ -147,7 +148,7 @@ Push it during application/plugin startup:
 ```java
 JdbORM db = JdbORM.create(dataSource);
 
-var result = db.pushSchema(DbSchema.SCHEMA);
+SchemaPushResult result = db.pushSchema(DbSchema.SCHEMA);
 if (result.changed()) {
     result.executedSql().forEach(System.out::println);
 }

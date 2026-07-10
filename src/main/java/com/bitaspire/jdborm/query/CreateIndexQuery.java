@@ -8,6 +8,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -47,7 +49,7 @@ public class CreateIndexQuery implements Query {
      */
     public CreateIndexQuery on(String table, String... columns) {
         this.table = table;
-        this.columns.addAll(List.of(columns));
+        this.columns.addAll(Arrays.asList(columns));
         return this;
     }
 
@@ -117,7 +119,7 @@ public class CreateIndexQuery implements Query {
 
     @Override
     public List<Object> getParameters() {
-        return List.of();
+        return Collections.emptyList();
     }
 
     /**

@@ -7,10 +7,14 @@ group = "com.bitaspire"
 version = "0.5.0"
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
     withSourcesJar()
     withJavadocJar()
+}
+
+tasks.compileJava {
+    options.release = 8
 }
 
 repositories {

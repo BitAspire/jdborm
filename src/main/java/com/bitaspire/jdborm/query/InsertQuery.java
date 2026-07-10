@@ -303,8 +303,8 @@ public class InsertQuery implements Query {
                 if (i > 0) sql.append(", ");
                 String colName = columns.get(i);
                 Object val = row.get(colName);
-                if (val instanceof RawExpression expr) {
-                    sql.append(expr.expression());
+                if (val instanceof RawExpression) {
+                    sql.append(((RawExpression) val).expression());
                 } else {
                     sql.append("?");
                 }
@@ -334,7 +334,7 @@ public class InsertQuery implements Query {
     public List<Object> getParameters() {
         List<Object> params = new ArrayList<>();
         List<String> columns = unifiedColumns();
-        List<Map<String, Object>> rows = !batchRows.isEmpty() ? batchRows : List.of(values);
+        List<Map<String, Object>> rows = !batchRows.isEmpty() ? batchRows : java.util.Collections.singletonList(values);
         for (Map<String, Object> row : rows) {
             for (String colName : columns) {
                 Object val = row.get(colName);
@@ -434,8 +434,8 @@ public class InsertQuery implements Query {
         for (int i = 0; i < columns.size(); i++) {
             if (i > 0) sql.append(", ");
             Object val = firstRow.get(columns.get(i));
-            if (val instanceof RawExpression expr) {
-                sql.append(expr.expression());
+            if (val instanceof RawExpression) {
+                sql.append(((RawExpression) val).expression());
             } else {
                 sql.append("?");
             }

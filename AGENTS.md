@@ -25,7 +25,7 @@
 
 ## Code Style
 
-- Java 17+, no external runtime dependencies.
+- Java 8+, no external runtime dependencies.
 - Package root: `com.bitaspire.jdborm`.
 - Fluent API with method chaining, inspired by Drizzle ORM.
 - Static imports are expected for `Conditions.*` in examples/tests.
@@ -336,7 +336,7 @@ List<User> mapped = db.select("*").from("users")
 Long count = db.select("count(*)").from("users").executeScalar(Long.class);
 
 // INSERT with UUIDv7 generated in Java
-var keys = db.insert("users")
+InsertQuery.GeneratedKeys keys = db.insert("users")
     .set("id", Uuids.v7())
     .set("name", "John")
     .setRaw("created_at", "CURRENT_TIMESTAMP")

@@ -386,8 +386,8 @@ public class JdbORM {
                 }
                 rollbackSchemaChanges(conn, rollbackSql);
             }
-            if (e instanceof JdbOrmException jdbOrmException) {
-                throw jdbOrmException;
+            if (e instanceof JdbOrmException) {
+                throw (JdbOrmException) e;
             }
             throw new JdbOrmException("Failed to push schema", e);
         } finally {
@@ -427,7 +427,7 @@ public class JdbORM {
 
     private String currentSchema(Connection conn) throws SQLException {
         String schema = conn.getSchema();
-        return schema == null || schema.isBlank() ? null : schema;
+        return schema == null || schema.trim().isEmpty() ? null : schema;
     }
 
     private void rejectUnsupportedConstraintEvolution(TableDefinition table) {
@@ -511,7 +511,7 @@ public class JdbORM {
     }
 
     private List<String> schemaCandidates(String schema) {
-        return schema == null ? List.of((String) null) : identifierCandidates(schema);
+        return schema == null ? java.util.Collections.singletonList(null) : identifierCandidates(schema);
     }
 
     private List<String> identifierCandidates(String identifier) {
@@ -537,7 +537,22 @@ public class JdbORM {
         return expected != null && actual != null && expected.equalsIgnoreCase(actual);
     }
 
-    private record QualifiedName(String schema, String name) {
+    private static final class QualifiedName {
+        private final String schema;
+        private final String name;
+
+        private QualifiedName(String schema, String name) {
+            this.schema = schema;
+            this.name = name;
+        }
+
+        private String schema() {
+            return schema;
+        }
+
+        private String name() {
+            return name;
+        }
     }
 
     /**

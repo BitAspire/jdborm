@@ -55,7 +55,17 @@ public interface Condition {
 /**
  * A simple condition: {@code column operator ?}.
  */
-record SimpleCondition(String column, String operator, Object value) implements Condition {
+final class SimpleCondition implements Condition {
+    private final String column;
+    private final String operator;
+    private final Object value;
+
+    SimpleCondition(String column, String operator, Object value) {
+        this.column = column;
+        this.operator = operator;
+        this.value = value;
+    }
+
     @Override
     public void appendTo(StringBuilder sql, List<Object> params) {
         sql.append(column).append(" ").append(operator).append(" ?");
@@ -68,7 +78,15 @@ record SimpleCondition(String column, String operator, Object value) implements 
  * Adds parentheses around the right child if its combining operator differs
  * from AND.
  */
-record AndCondition(Condition left, Condition right) implements Condition {
+final class AndCondition implements Condition {
+    private final Condition left;
+    private final Condition right;
+
+    AndCondition(Condition left, Condition right) {
+        this.left = left;
+        this.right = right;
+    }
+
     @Override
     public void appendTo(StringBuilder sql, List<Object> params) {
         appendChild(sql, params, left);
@@ -98,7 +116,15 @@ record AndCondition(Condition left, Condition right) implements Condition {
  * Adds parentheses around the right child if its combining operator differs
  * from OR.
  */
-record OrCondition(Condition left, Condition right) implements Condition {
+final class OrCondition implements Condition {
+    private final Condition left;
+    private final Condition right;
+
+    OrCondition(Condition left, Condition right) {
+        this.left = left;
+        this.right = right;
+    }
+
     @Override
     public void appendTo(StringBuilder sql, List<Object> params) {
         appendChild(sql, params, left);
@@ -126,7 +152,13 @@ record OrCondition(Condition left, Condition right) implements Condition {
 /**
  * Negation condition: {@code NOT (...)}.
  */
-record NotCondition(Condition inner) implements Condition {
+final class NotCondition implements Condition {
+    private final Condition inner;
+
+    NotCondition(Condition inner) {
+        this.inner = inner;
+    }
+
     @Override
     public void appendTo(StringBuilder sql, List<Object> params) {
         sql.append("NOT (");
@@ -138,7 +170,15 @@ record NotCondition(Condition inner) implements Condition {
 /**
  * IN condition: {@code column IN (?, ?, ...)}.
  */
-record InCondition(String column, Object[] values) implements Condition {
+final class InCondition implements Condition {
+    private final String column;
+    private final Object[] values;
+
+    InCondition(String column, Object[] values) {
+        this.column = column;
+        this.values = values;
+    }
+
     @Override
     public void appendTo(StringBuilder sql, List<Object> params) {
         sql.append(column).append(" IN (");
@@ -154,7 +194,17 @@ record InCondition(String column, Object[] values) implements Condition {
 /**
  * BETWEEN condition: {@code column BETWEEN ? AND ?}.
  */
-record BetweenCondition(String column, Object start, Object end) implements Condition {
+final class BetweenCondition implements Condition {
+    private final String column;
+    private final Object start;
+    private final Object end;
+
+    BetweenCondition(String column, Object start, Object end) {
+        this.column = column;
+        this.start = start;
+        this.end = end;
+    }
+
     @Override
     public void appendTo(StringBuilder sql, List<Object> params) {
         sql.append(column).append(" BETWEEN ? AND ?");
@@ -166,7 +216,15 @@ record BetweenCondition(String column, Object start, Object end) implements Cond
 /**
  * IS NULL / IS NOT NULL condition.
  */
-record IsNullCondition(String column, boolean negated) implements Condition {
+final class IsNullCondition implements Condition {
+    private final String column;
+    private final boolean negated;
+
+    IsNullCondition(String column, boolean negated) {
+        this.column = column;
+        this.negated = negated;
+    }
+
     @Override
     public void appendTo(StringBuilder sql, List<Object> params) {
         sql.append(column).append(negated ? " IS NOT NULL" : " IS NULL");
@@ -176,7 +234,13 @@ record IsNullCondition(String column, boolean negated) implements Condition {
 /**
  * Raw SQL fragment condition — appended verbatim without any parameters.
  */
-record RawCondition(String sqlFragment) implements Condition {
+final class RawCondition implements Condition {
+    private final String sqlFragment;
+
+    RawCondition(String sqlFragment) {
+        this.sqlFragment = sqlFragment;
+    }
+
     @Override
     public void appendTo(StringBuilder sql, List<Object> params) {
         sql.append(sqlFragment);
