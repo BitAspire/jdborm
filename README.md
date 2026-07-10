@@ -58,7 +58,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.BitAspire:jdborm:0.5.0")
+    implementation("com.github.BitAspire:jdborm:0.6.0")
 }
 ```
 
@@ -75,7 +75,7 @@ dependencies {
 <dependency>
     <groupId>com.github.BitAspire</groupId>
     <artifactId>jdborm</artifactId>
-    <version>0.5.0</version>
+    <version>0.6.0</version>
 </dependency>
 ```
 
